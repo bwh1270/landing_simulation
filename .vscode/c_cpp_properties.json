@@ -1,0 +1,27 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/src/landing_simulation/include/**",
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/src/mavros/libmavconn/include/**",
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/src/mavros/mavros/include/**",
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/src/mavros/mavros_msgs/include/**",
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/src/simulator_test/include/**",
+        "/home/hyunee/AIMS/PX4_PPNNPN/autonomous_landing_ws/src/mavros/test_mavros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

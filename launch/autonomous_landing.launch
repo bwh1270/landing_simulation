@@ -1,0 +1,81 @@
+<launch>
+<!-- Get param -->
+	<!-- <rosparam command="load" file="$(find landing_simulation)/config/param.yaml" /> -->
+
+<!-- Perception Node -->
+
+    <!-- AprilTag ROS Package -->
+    <!-- Set arguments -->
+    <arg name="launch_prefix" default="" /> 
+    <arg name="node_namespace" default="apriltag_ros_continuous_node" />
+    <arg name="cam_name" default="/cgo3_camera" />
+    <arg name="cam_frame" default="cgo3_camera_optical_frame" />
+    <arg name="image_topic" default="image_raw" />
+
+    <!-- Set parameters -->
+    <rosparam command="load" file="$(find landing_simulation)/config/settings.yaml" ns="$(arg node_namespace)" />
+    <rosparam command="load" file="$(find landing_simulation)/config/tags.yaml" ns="$(arg node_namespace)" />
+
+    <node pkg="apriltag_ros" type="apriltag_ros_continuous_node" name="$(arg node_namespace)" clear_params="true" output="screen" launch-prefix="$(arg launch_prefix)" >
+		<!-- Remap topics from those used in code to those on the ROS network -->
+		<remap from="image_rect" to="$(arg cam_name)/$(arg image_topic)" />
+		<remap from="camera_info" to="$(arg cam_name)/camera_info" />
+
+		<param name="cam_frame" type="str" value="$(arg cam_frame)" />
+		<param name="publish_tag_detections_image" type="bool" value="true" />      <!-- default: false -->
+	</node>
+
+    <!-- AprilTag Detection - tramsform the measured data w.r.t. camera frame into body frame -->
+    <node pkg="landing_simulation" name="apriltag_node" type="apriltag_node" output="screen">
+        <param name="big_tag_id" value="13"/> 
+        <param name="small_tag_id" value="14"/>
+        <param name="inertia_frame" value="map"/>
+        <param name="body_frame" value="base_link"/>
+        <param name="camera_frame" value="cgo3_camera_optical_frame"/>
+        <param name="big_aprilTag_frame" value="big_aprilTag"/>
+    </node>
+
+
+<!-- Estimator Node -->
+    
+    <!-- Linear Kalman Filter -->
+	<node pkg="landing_simulation" name="kf_node" type="kf_node" output="screen">
+        <param name="body_frame" value="base_link"/>
+        <param name="big_aprilTag_frame" value="big_aprilTag"/>
+        <param name="small_aprilTag_frame" value="small_aprilTag"/>
+        <param name="height_of_ugv" value="0.187"/>
+        <!-- rate of prediction step [s] -->
+        <param name="min_dt" value="0.01"/> 
+        <!-- Variance of the process noise 3,3.25-->
+        <param name="qu" value="3.0"/> 
+        <param name="qa" value="3.0"/> 
+        <!-- Variance of the observation noise -->
+        <param name="ru_pxy" value="0.001601"/>
+        <param name="ru_pz" value="0.001601"/> 
+        <param name="ru_vxy" value="0.000627"/>
+        <param name="ru_vz" value="0.000627"/> 
+        <param name="ru_a" value="0.044236"/> 
+        <param name="ra/u_pxy" value="0.005446"/>
+        <param name="ra/u_pz" value="0.005446"/>
+        <param name="ra/u_vxy" value="2.629882"/>
+        <param name="ra/u_vz" value="2.629882"/>
+        <!-- Maximum time (seconds) with no measurment before stopping the filter -->
+        <param name="max_measurement_off_time" value="3.0"/>
+    </node>
+
+<!-- High Level Control (Position Controller) -->
+
+    <!-- PDFF Controller -->
+    <node pkg="landing_simulation" name="pc_node" type="pc_node" output="screen">
+        <param name="height_of_ugv" value="0.187"/>
+        <param name="pdff_kp" value="0.5"/>
+        <param name="pdff_kd" value="0.05"/>
+        <param name="pdff_kff" value="1.0"/>
+        <param name="pid_kp" value="1.0"/>
+        <param name="pid_ki" value="0.0"/>
+        <param name="pid_kd" value="0.0"/>
+        <param name="max_horizontal_vel" value="10.0"/>
+        <param name="max_upward_vel" value="3.0"/>
+        <param name="max_downward_vel" value="1.0"/>
+    </node>
+</launch>

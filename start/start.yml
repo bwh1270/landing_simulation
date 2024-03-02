@@ -1,0 +1,12 @@
+name: Aims
+root: /home/hyunee/AIMS/PX4_PPNNPN
+start_window: px4
+windows:
+  - px4:
+      layout: tiled
+      panes:
+        - cd PX4-Autopilot && ./run_px4RosGazebo.sh
+        - ./QGC/QGroundControl.AppImage
+  
+  - aims:
+        - cd autonomous_landing_ws && source devel/setup.bash && waitForRos; sleep 3; roslaunch landing_simulation tracker_control.launch
