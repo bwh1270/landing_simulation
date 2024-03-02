@@ -24,6 +24,7 @@ Matrix4d calQuaternionMatrix(Vector4d q)
     return qM;
 }
 
+
 Vector3d convertQuaternionToEuler(Vector4d q)
 {
     Vector3d euler;

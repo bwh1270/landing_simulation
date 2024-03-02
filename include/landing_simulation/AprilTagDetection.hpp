@@ -32,9 +32,11 @@ class AprilTagDetection
 {
     private:
         int tagID_[2];
-        Vector4d q_;        // UAV orientation w.r.t. {i}
+        Vector4d UAV_q_;        // UAV orientation w.r.t. {i}
+
+        // For calculating the Velocity Measurement
         bool bIsFirstLoop_;
-        Vector3d priorPos_; // UGV position w.r.t. {i} at prior step
+        Vector3d priorUGVPos_; // UGV position w.r.t. {i} at prior step
         double timeStamp_;
         double priorDeltaT_; // prevent dt=0 => vel -> infinity
 
@@ -52,7 +54,7 @@ class AprilTagDetection
         // Input & Output
         ros::Subscriber UAVPoseSub_;      // To convert {c} w.r.t. {i}, {b}-{i} relation is needed.
         ros::Subscriber detectionRawSub_; // input - relative pose b/w aprilTag and camera w.r.t. camera frame
-        ros::Publisher relativePosePub_; // output - relative pose b/w aprilTag and UAV w.r.t. body frame
+        ros::Publisher relativeOdomPub_; // output - relative pose b/w aprilTag and UAV w.r.t. body frame
 
     public:
         AprilTagDetection(ros::NodeHandle* nh);

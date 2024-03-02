@@ -21,11 +21,12 @@ tfListener_(tfBuffer_)
     // Input & Output
     UAVPoseSub_      = nh->subscribe("/mavros/global_position/local", 10, &AprilTagDetection::poseCb, this);
     detectionRawSub_ = nh->subscribe("/tag_detections", 10, &AprilTagDetection::aprilTagCb, this);
-    relativePosePub_ = nh->advertise<nav_msgs::Odometry>("/magpie/perception/relative_pose", 5);
+    relativeOdomPub_ = nh->advertise<nav_msgs::Odometry>("/magpie/perception/relative_pose", 5);
 
-    q_ << 0, 0, 0, 0;
+    // Initializing
+    UAV_q_ << 0, 0, 0, 0;
+    priorUGVPos_ << 0, 0, 0;
     bIsFirstLoop_ = true;
-    priorPos_ << 0, 0, 0;
 
     ROS_INFO("AprilTag Detection Node is activated..");
 }
@@ -36,10 +37,10 @@ AprilTagDetection::~AprilTagDetection()
 
 void AprilTagDetection::poseCb(const nav_msgs::Odometry::ConstPtr& msg)
 {
-    q_(0) = msg->pose.pose.orientation.w;
-    q_(1) = msg->pose.pose.orientation.x;
-    q_(2) = msg->pose.pose.orientation.y;
-    q_(3) = msg->pose.pose.orientation.z;
+    UAV_q_(0) = msg->pose.pose.orientation.w;
+    UAV_q_(1) = msg->pose.pose.orientation.x;
+    UAV_q_(2) = msg->pose.pose.orientation.y;
+    UAV_q_(3) = msg->pose.pose.orientation.z;
 
     // body w.r.t. inertia broadcaster
     static tf2_ros::TransformBroadcaster br; 
@@ -81,11 +82,11 @@ void AprilTagDetection::poseCb(const nav_msgs::Odometry::ConstPtr& msg)
  * */
 void AprilTagDetection::aprilTagCb(const apriltag_ros::AprilTagDetectionArray::ConstPtr& msg)
 {   
-    Vector4d p, q;
-    Matrix4d q_M, pM, qM;
+    Vector4d rel_p_b, rel_q_b;
+    Matrix4d UAV_q_M, rel_pM, rel_qM;
     geometry_msgs::PoseStamped detectedMsg;
     geometry_msgs::PoseStamped bodyPoseMsg;
-    nav_msgs::Odometry relativePoseMsg;
+    nav_msgs::Odometry relativeOdomMsg;  // output - relative position/velocity of UGV with respect to UAV in {i}
     int detectedPoints = msg->detections.size();
 
     if (detectedPoints > 0)
@@ -95,6 +96,7 @@ void AprilTagDetection::aprilTagCb(const apriltag_ros::AprilTagDetectionArray::C
             if (msg->detections[i].id[0] == tagID_[0])
             {
                 try {
+                    // transform the relative position of UGV with respect to UAV in {c} into in {b}
                     detectedMsg.header.frame_id = cameraFrame_;
                     detectedMsg.header.stamp = msg->detections[i].pose.header.stamp;
                     detectedMsg.pose.position.x = msg->detections[i].pose.pose.pose.position.x;
@@ -107,56 +109,56 @@ void AprilTagDetection::aprilTagCb(const apriltag_ros::AprilTagDetectionArray::C
 
                     bodyPoseMsg = tfBuffer_.transform(detectedMsg, bodyFrame_, ros::Duration(1.0));
                     
-                    // convert relative pose w.r.t. from {b} to {i}
-                    p(0) = 0.0;
-                    p(1) = bodyPoseMsg.pose.position.x;
-                    p(2) = bodyPoseMsg.pose.position.y;
-                    p(3) = bodyPoseMsg.pose.position.z;
-                    q(0) = bodyPoseMsg.pose.orientation.w;
-                    q(1) = bodyPoseMsg.pose.orientation.x;
-                    q(2) = bodyPoseMsg.pose.orientation.y;
-                    q(3) = bodyPoseMsg.pose.orientation.z;
+                    // transform the relative position of UGV with respect to UAV in {b} into in {i}
+                    rel_p_b(0) = 0.0;
+                    rel_p_b(1) = bodyPoseMsg.pose.position.x;
+                    rel_p_b(2) = bodyPoseMsg.pose.position.y;
+                    rel_p_b(3) = bodyPoseMsg.pose.position.z;
+                    rel_q_b(0) = bodyPoseMsg.pose.orientation.w;
+                    rel_q_b(1) = bodyPoseMsg.pose.orientation.x;
+                    rel_q_b(2) = bodyPoseMsg.pose.orientation.y;
+                    rel_q_b(3) = bodyPoseMsg.pose.orientation.z;
 
-                    q_M = calQuaternionMatrix(q_);
-                    pM  = calQuaternionMatrix(p);
-                    qM  = calQuaternionMatrix(q);
+                    UAV_q_M = calQuaternionMatrix(UAV_q_);
+                    rel_pM  = calQuaternionMatrix(rel_p_b);
+                    rel_qM  = calQuaternionMatrix(rel_q_b);
                     for (int i=0; i<3; i++) {
-                        q_(i+1) = -q_(i+1);
+                        UAV_q_(i+1) = -UAV_q_(i+1); // conjugate
                     }
-                    p = q_M*pM*q_;
-                    q = q_M*qM*q_;
+                    rel_pM = UAV_q_M*rel_pM*UAV_q_;
+                    rel_qM = UAV_q_M*rel_qM*UAV_q_;
                     // ROS_INFO("[x,y,z]: [%.3f, %.3f, %.3f]", p(1), p(2), p(3));
                     // ROS_INFO("[w,x,y,z]: [%.3f, %.3f, %.3f, %.3f]", q(0), q(1), q(2), q(3));
 
                     if (!bIsFirstLoop_) {
-                        relativePoseMsg.header.frame_id = inertiaFrame_;
-                        relativePoseMsg.header.stamp    = bodyPoseMsg.header.stamp;
-                        relativePoseMsg.pose.pose.position.x = p(1);
-                        relativePoseMsg.pose.pose.position.y = p(2);
-                        relativePoseMsg.pose.pose.position.z = p(3);
-                        relativePoseMsg.pose.pose.orientation.w = q(0);
-                        relativePoseMsg.pose.pose.orientation.x = q(1);
-                        relativePoseMsg.pose.pose.orientation.y = q(2);
-                        relativePoseMsg.pose.pose.orientation.z = q(3);
+                        relativeOdomMsg.header.frame_id = inertiaFrame_;
+                        relativeOdomMsg.header.stamp    = ros::Time::now();
+                        relativeOdomMsg.pose.pose.position.x = rel_pM(1);
+                        relativeOdomMsg.pose.pose.position.y = rel_pM(2);
+                        relativeOdomMsg.pose.pose.position.z = rel_pM(3);
+                        relativeOdomMsg.pose.pose.orientation.w = rel_qM(0);
+                        relativeOdomMsg.pose.pose.orientation.x = rel_qM(1);
+                        relativeOdomMsg.pose.pose.orientation.y = rel_qM(2);
+                        relativeOdomMsg.pose.pose.orientation.z = rel_qM(3);
 
                         double deltaT = ros::Time::now().toSec()-timeStamp_;
                         if (deltaT == 0.0) {
                             deltaT = priorDeltaT_;
                         }
-                        relativePoseMsg.twist.twist.linear.x = (p(1) - priorPos_(0)) / deltaT;
-                        relativePoseMsg.twist.twist.linear.y = (p(2) - priorPos_(1)) / deltaT;
-                        relativePoseMsg.twist.twist.linear.z = (p(3) - priorPos_(2)) / deltaT;
-                        relativePosePub_.publish(relativePoseMsg);
+                        relativeOdomMsg.twist.twist.linear.x = (rel_pM(1) - priorUGVPos_(0)) / deltaT;
+                        relativeOdomMsg.twist.twist.linear.y = (rel_pM(2) - priorUGVPos_(1)) / deltaT;
+                        relativeOdomMsg.twist.twist.linear.z = (rel_pM(3) - priorUGVPos_(2)) / deltaT;
+                        relativeOdomPub_.publish(relativeOdomMsg);
 
                         for (int i=0; i<3; i++) {
-                            priorPos_(i) = p(i+1);
+                            priorUGVPos_(i) = rel_pM(i+1);
                             priorDeltaT_ = deltaT;
                             timeStamp_ = ros::Time::now().toSec();
                         }
                     
                     } else {
                         for (int i=0; i<3; i++) {
-                            priorPos_(i) = p(i+1);
+                            priorUGVPos_(i) = rel_pM(i+1);
                             timeStamp_ = ros::Time::now().toSec();
                         }
                         bIsFirstLoop_ = false;
