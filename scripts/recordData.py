@@ -24,20 +24,22 @@ class RecordData:
         self.UAVLists_ = []
         self.IMULists_ = []
         self.aprilTagList_ = []
-        self.KFList_ = []
-        self.KFUncertaintyList_ = []
-        self.KF2List_ = []
-        self.KF2UncertaintyList_ = []
-        self.KF3List_ = []
+
+        self.KF0List_ = []
+        self.KF0UncertaintyList_ = []
+        self.KF1List_ = []
+        self.KF1UncertaintyList_ = []
+
         self.GTList_ = []
         self.VelSpList_ = []
 
         rospy.Subscriber("/mavros/global_position/local", Odometry, self.UAVPoseCb)
         rospy.Subscriber("/mavros/imu/data", Imu, self.IMUCb)
         rospy.Subscriber("/magpie/perception/relative_pose", Odometry, self.aprilTagCb)
-        rospy.Subscriber("/magpie/estimator/state", Odometry, self.KFCb)
-        rospy.Subscriber("/magpie/estimator/state2", Odometry, self.KF2Cb)
-        rospy.Subscriber("/magpie/estimator/state3", Odometry, self.KF3Cb)
+
+        rospy.Subscriber("/magpie/estimator/state0", Odometry, self.KF0Cb)
+        rospy.Subscriber("/magpie/estimator/state1", Odometry, self.KF1Cb)
+
         rospy.Subscriber("/odom", Odometry, self.GTCb)
         rospy.Subscriber("/mavros/setpoint_velocity/cmd_vel_unstamped", Twist, self.VelCb)
         
@@ -65,30 +67,23 @@ class RecordData:
             position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
             self.aprilTagList_.append([time] + list(position))
         
-    def KFCb(self, msg):
+    def KF0Cb(self, msg):
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
             uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
-            self.KFList_.append([time] + list(position))
-            self.KFUncertaintyList_.append([time] + list(uncertainty))
+            self.KF0List_.append([time] + list(position))
+            self.KF0UncertaintyList_.append([time] + list(uncertainty))
 
-    def KF2Cb(self, msg):
+    def KF1Cb(self, msg):
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
             uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
-            self.KF2List_.append([time] + list(position))
-            self.KF2UncertaintyList_.append([time] + list(uncertainty))
-
-    def KF3Cb(self, msg):
-        
-        if (len(self.UAVPose_) == 3):
-            time = msg.header.stamp.to_sec()
-            position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
-            self.KF3List_.append([time] + list(position))
+            self.KF1List_.append([time] + list(position))
+            self.KF1UncertaintyList_.append([time] + list(uncertainty))
             
     def GTCb(self, msg):
         
@@ -112,46 +107,46 @@ class RecordData:
         
         GPScols = ['time','x','y','z','vx','vy','vz']
         IMUcols3 = ['ax','ay','az'] 
+        cols = ['time', 'x', 'y', 'z']
+        uncerCols = ['time' ,'pxx', 'pyy', 'pzz']
+        vCols = ['time', 'vx', 'vy', 'vz']
          
         GPSIdx = range(len(self.UAVLists_))
         dfGPSData = pd.DataFrame(self.UAVLists_, columns=GPScols, index=GPSIdx)
         IMUIdx = range(len(self.IMULists_))
         dfIMUData = pd.DataFrame(self.IMULists_, columns=IMUcols3, index=IMUIdx)
         
-        
-        cols = ['time', 'x', 'y', 'z']
-        uncerCols = ['time' ,'pxx', 'pyy', 'pzz']
         GTIdx = range(len(self.GTList_))
         dfGTData = pd.DataFrame(self.GTList_, columns=cols, index=GTIdx)
-        KFIdx = range(len(self.KFList_))
-        dfKFData = pd.DataFrame(self.KFList_, columns=cols, index=KFIdx)
-        KFIdx = range(len(self.KFUncertaintyList_))
-        dfKFUncerData = pd.DataFrame(self.KFUncertaintyList_, columns=uncerCols, index=KFIdx)
-        KF2Idx = range(len(self.KF2List_))
-        dfKF2Data = pd.DataFrame(self.KF2List_, columns=cols, index=KF2Idx)
-        KF2Idx = range(len(self.KF2UncertaintyList_))
-        dfKF2UncerData = pd.DataFrame(self.KF2UncertaintyList_, columns=uncerCols, index=KF2Idx)
-        KF3Idx = range(len(self.KF3List_))
-        dfKF3Data = pd.DataFrame(self.KF3List_, columns=cols, index=KF3Idx)
+        
+        KF0Idx = range(len(self.KF0List_))
+        dfKF0Data = pd.DataFrame(self.KF0List_, columns=cols, index=KF0Idx)
+        KF0Idx = range(len(self.KF0UncertaintyList_))
+        dfKF0UncerData = pd.DataFrame(self.KF0UncertaintyList_, columns=uncerCols, index=KF0Idx)
+        
+        KF1Idx = range(len(self.KF1List_))
+        dfKF1Data = pd.DataFrame(self.KF1List_, columns=cols, index=KF1Idx)
+        KF1Idx = range(len(self.KF1UncertaintyList_))
+        dfKF1UncerData = pd.DataFrame(self.KF1UncertaintyList_, columns=uncerCols, index=KF1Idx)
+        
         aprilTagIdx = range(len(self.aprilTagList_))
         dfAprilTagData = pd.DataFrame(self.aprilTagList_, columns=cols, index=aprilTagIdx)
 
-        vCols = ['time', 'vx', 'vy', 'vz']
         dfVelSpIdx = range(len(self.VelSpList_))
         dfVelSpData = pd.DataFrame(self.VelSpList_, columns=vCols, index=dfVelSpIdx)
 
+
         os.chdir("../data")
         dfAprilTagData.to_csv("aprilTagData.csv", index=False)
-        dfKFData.to_csv("KFData.csv", index=False)
-        dfKF2Data.to_csv("KF2Data.csv", index=False)
-        dfKF3Data.to_csv("KF3Data.csv", index=False)
+        dfKF0Data.to_csv("KF0Data.csv", index=False)
+        dfKF1Data.to_csv("KF1Data.csv", index=False)
         dfGTData.to_csv("GTData.csv", index=False)
 
         dfGPSData.to_csv("GPSData.csv", index=False)
         dfIMUData.to_csv("IMUData.csv", index=False)
 
-        dfKFUncerData.to_csv("KFUncertaintyData.csv", index=False)
-        dfKF2UncerData.to_csv("KF2UncertaintyData.csv", index=False)
+        dfKF0UncerData.to_csv("KF0UncertaintyData.csv", index=False)
+        dfKF1UncerData.to_csv("KF1UncertaintyData.csv", index=False)
         
         dfVelSpData.to_csv("VelSpData.csv", index=False)
 

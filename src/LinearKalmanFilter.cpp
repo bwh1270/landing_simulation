@@ -1,9 +1,7 @@
 #include "landing_simulation/LinearKalmanFilter.hpp"
 
 
-LinearKF::LinearKF(ros::NodeHandle *nh) :
-statePredBufferSize_(40),
-bAprilTagIsBig_(true)
+LinearKF::LinearKF(ros::NodeHandle *nh)
 {
     // Get Parameters
     nh->getParam("body_frame", bodyFrame_);
@@ -27,13 +25,12 @@ bAprilTagIsBig_(true)
 
     nh->getParam("max_measurement_off_time", maxMeasurementOffTime_);
     tagTimeStamp_ = 0.0f;
+    bKFIsInitialized_ = false;
+    bAprilTagIsBig_ = true;
+    bAprilTagIsMeasured_ = false;
 
     // Input & Output
     aprilTagSub_ = nh->subscribe("/magpie/perception/relative_pose", 1, &LinearKF::aprilTagCb, this);
-    statePub_    = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state", 5);
-    statePub2_   = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state2", 5);
-    statePub3_   = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state3", 5);
-
     // Initialize subscribers (queue size 1 for minimum latency)
     GPSsub_.subscribe(*nh, "/mavros/global_position/local", 1);
     IMUsub_.subscribe(*nh, "/mavros/imu/data", 1);
@@ -41,15 +38,11 @@ bAprilTagIsBig_(true)
     // Initialize synchronizer
     sync_.reset(new message_filters::Synchronizer<mySyncPolicy_>(mySyncPolicy_(10), GPSsub_, IMUsub_));
     sync_->registerCallback(boost::bind(&LinearKF::GPSIMUCb, this, _1, _2));
-    
 
-    ROS_INFO("Linear Kalman Filter Node is activated...");
-    ROS_INFO("State buffer length corresponds to %.3f seconds", dt_*(double)statePredBufferSize_);
+    statePub0_   = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state0", 5);  // 0 means Low frequency
+    statePub1_   = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state1", 5);  // 1 means High frequency
 
     initKF();
-
-    // Define timer for constant loop rate
-    predictTimer_ = nh->createTimer(ros::Duration(dt_), &LinearKF::predictLoop, this);
 }
 
 LinearKF::~LinearKF()
@@ -180,56 +173,29 @@ void LinearKF::setR()
 void LinearKF::initKF()
 {
     // Initialize state transition matrix and process noise covariance
-    setF(&F_, 0.01);          
-    setF(&F2_, 0.05);      
-    setF(&F3_, 0.02);
-    setQ(&Q_, 0.01);
-    setQ(&Q2_, 0.05);
-    setQ(&Q3_, 0.02);    
+    setF(&F0_, 0.05);      
+    setF(&F1_, 0.02);
+    setQ(&Q0_, 0.05);
+    setQ(&Q1_, 0.02);    
     setQc(&Qc_, 0.05);
     setH();
     setR();
 
     // initial state estimate (0|0 step)
-    statePred_.time_stamp = ros::Time::now();
-    statePred2_.time_stamp = ros::Time::now();
-    statePred3_.time_stamp = ros::Time::now();
-    statePred_.x = MatrixXd::Zero(15,1);
-    statePred_.P = 500*MatrixXd::Identity(15,15);
-    statePred2_.x = MatrixXd::Zero(15,1);
-    statePred2_.P = 500*MatrixXd::Identity(15,15);
-    statePred3_.x = MatrixXd::Zero(15,1);
-    statePred3_.P = 500*MatrixXd::Identity(15,15);
-    
-
-    // statePred_.x(2,0)   = 3.0;        // z of UAV
-    // statePred_.x(11,0)  = UGVHeight_; // z of UGV
-    // statePred2_.x(2,0)  = 3.0;
-    // statePred2_.x(11,0) = UGVHeight_;
-    // statePred3_.x(2,0)  = 3.0;
-    // statePred3_.x(11,0) = UGVHeight_;
-    // statePred_.P(2,2)    = 0.0;
-    // statePred_.P(11,11)  = 0.0;
-    // statePred2_.P(2,2)   = 0.0;
-    // statePred2_.P(11,11) = 0.0;
-    // statePred3_.P(2,2)   = 0.0;
-    // statePred3_.P(11,11) = 0.0; 
-
-    stateForControl_ = statePred2_;
-    statePredBuffer_.clear();  // Clear state buffer
-    statePredBuffer2_.clear();
-    statePredBuffer3_.clear();
-
-    // initial three measurement vectors (0|0 step)
-    // ZMeas_.z.resize(15,1); //z
-    // ZMeas_.z = MatrixXd::Zero(15,1); //z
-    ZMeas2_.z.resize(15,1);
-    ZMeas2_.z = MatrixXd::Zero(15,1);       
+    statePred0_.time_stamp = ros::Time::now();
+    statePred0_.x = MatrixXd::Zero(15,1);
+    statePred0_.P = 500*MatrixXd::Identity(15,15);
+    statePred1_ = statePred0_;
 
     // First Prediction for X_{1|0} with X_{0|0}
-    predict();
-    predict2();
-    predict3();
+    predict0();
+    predict1();
+
+    // initial three measurement vectors, just initializing no meaning of KF
+    ZMeas_.time_stamp = ros::Time::now();
+    ZMeas_.z.resize(15,1);
+    ZMeas_.z = MatrixXd::Zero(15,1);
+
     bKFIsInitialized_ = true;
 
     ROS_INFO("Linear Kalman Filter is initialized.");
@@ -249,85 +215,49 @@ void LinearKF::aprilTagCb(const nav_msgs::Odometry::ConstPtr& msg)
         return;
     }
 
-    // step 1: measure
-    // ZMeas_.time_stamp = msg->header.stamp; //z
-    // ZMeas_.z(9,0)  = msg->pose.pose.position.x;
-    // ZMeas_.z(10,0) = msg->pose.pose.position.y;
-    // ZMeas_.z(11,0) = msg->pose.pose.position.z;
-    // ZMeas_.z(12,0) = msg->twist.twist.linear.x;
-    // ZMeas_.z(13,0) = msg->twist.twist.linear.y;
-    // ZMeas_.z(14,0) = msg->twist.twist.linear.z;
-    // assert( ZMeas_.time_stamp.toSec() >= ZLastMeas_.time_stamp.toSec() ); //z
-    ZMeas2_.time_stamp = ros::Time::now(); //msg->header.stamp;
-    ZMeas2_.z(9,0)  = msg->pose.pose.position.x;
-    ZMeas2_.z(10,0) = msg->pose.pose.position.y;
-    ZMeas2_.z(11,0) = msg->pose.pose.position.z;
-    ZMeas2_.z(12,0) = msg->twist.twist.linear.x;
-    ZMeas2_.z(13,0) = msg->twist.twist.linear.y;
-    ZMeas2_.z(14,0) = msg->twist.twist.linear.z;
-    assert( ZMeas2_.time_stamp.toSec() >= ZLastMeas2_.time_stamp.toSec() );
+    /* KF w.r.t. Low freqeuncy measurement (AprilTag) */
+    if (bKFIsInitialized_) {
 
-    // prevent the time confusing due to calculation delay
-    for (int i=0; i<statePredBuffer_.size(); i++)
-    {
-        auto deltaT = ZMeas2_.time_stamp.toSec() - statePredBuffer_[i].time_stamp.toSec(); //z
-        if ((deltaT <= dt_) && (deltaT >= 0))
-        {
-        statePred_.time_stamp = statePredBuffer_[i].time_stamp;
-        statePred_.x = statePredBuffer_[i].x;
-        statePred_.P = statePredBuffer_[i].P;
-        statePredBuffer_.erase(statePredBuffer_.begin(),statePredBuffer_.begin()+i+1); // remove old states
-        break;
+        // step 1: measure
+        ZMeas_.time_stamp = ros::Time::now(); // measuring time
+        ZMeas_.z(9,0)  = msg->pose.pose.position.x;
+        ZMeas_.z(10,0) = msg->pose.pose.position.y;
+        ZMeas_.z(11,0) = msg->pose.pose.position.z;
+        ZMeas_.z(12,0) = msg->twist.twist.linear.x;
+        ZMeas_.z(13,0) = msg->twist.twist.linear.y;
+        ZMeas_.z(14,0) = msg->twist.twist.linear.z;
+        assert( ZMeas_.time_stamp.toSec() >= ZLastMeas_.time_stamp.toSec() );
+
+        // prevent the new GPS&IMU measurement interrupting Apriltag update due to calculating delay
+        auto ZMeasStatic = ZMeas_;
+
+        // step 2: update
+        // compute measurement residual (innovation)
+        auto y = ZMeasStatic.z - (H_ * statePred0_.x); //z
+
+
+        // Innovation covariance
+        auto S = (H_ * statePred0_.P * H_.transpose()) + R_;
+
+        // optimal Kalman gain
+        auto K = statePred0_.P * H_.transpose() * S.inverse();
+        // cout << ">> K: " << endl;
+        // cout << K << endl;
+
+        // Updated state estimate and it's covariacne
+        statePred0_.x = statePred0_.x + (K*y);
+        statePred0_.P = statePred0_.P - (K*H_*statePred0_.P);
+        // cout << ">> P: " << endl;
+        // cout << statePred_.P << endl;
+
+        ZLastMeas_.time_stamp = ZMeasStatic.time_stamp;
+        ZLastMeas_.z = ZMeasStatic.z;
+
+        // step 3: predict
+        if (!predict0()) {
+            return;
         }
-    }
-    for (int i=0; i<statePredBuffer2_.size(); i++)
-    {
-        auto deltaT = ZMeas2_.time_stamp.toSec() - statePredBuffer2_[i].time_stamp.toSec(); //z
-        if ((deltaT <= dt_) && (deltaT >= 0))
-        {
-        statePred2_.time_stamp = statePredBuffer2_[i].time_stamp;
-        statePred2_.x = statePredBuffer2_[i].x;
-        statePred2_.P = statePredBuffer2_[i].P;
-        statePredBuffer2_.erase(statePredBuffer2_.begin(),statePredBuffer2_.begin()+i+1); // remove old states
-        break;
-        }
-    }
-
-    // step 2: update
-    // compute measurement residual (innovation)
-    auto y = ZMeas2_.z - (H_ * statePred_.x); //z
-    auto y2 = ZMeas2_.z - (H_ * statePred2_.x); //z
-
-    // Innovation covariance
-    auto S = (H_ * statePred_.P * H_.transpose()) + R_;
-    auto S2 = (H_ * statePred2_.P * H_.transpose()) + R_;
-
-    // optimal Kalman gain
-    auto K = statePred_.P * H_.transpose() * S.inverse();
-    auto K2 = statePred2_.P * H_.transpose() * S2.inverse();
-    // cout << ">> K: " << endl;
-    // cout << K << endl;
-
-    // Updated state estimate and it's covariacne
-    statePred_.x = statePred_.x + (K*y);
-    statePred_.P = statePred_.P - (K*H_*statePred_.P);
-    statePred2_.x = statePred2_.x + (K2*y2);
-    statePred2_.P = statePred2_.P - (K2*H_*statePred2_.P);
-    // cout << ">> P: " << endl;
-    // cout << statePred_.P << endl;
-
-    tagTimeStamp_  = ros::Time::now().toSec(); //msg->header.stamp.toSec();
-    // ZLastMeas_.time_stamp = ZMeas_.time_stamp; //z
-    // ZLastMeas_.z = ZMeas_.z; //z
-    ZLastMeas2_.time_stamp = ZMeas2_.time_stamp;
-    ZLastMeas2_.z = ZMeas2_.z;
-
-    // step 3: predict
-    if (!predict()) {
-        return;
-    }
-    if (!predict2()) {
-        return;
+        tagTimeStamp_  = ros::Time::now().toSec(); // record measuring time
     }
 }
 
@@ -343,26 +273,10 @@ void LinearKF::GPSIMUCb(const nav_msgs::Odometry::ConstPtr& gps, const sensor_ms
         return;
     }
     
-    float g = 9.80655;
+    float g = 9.80666;
 
-    /* KF & KF2 */
-    // step 1: measure
-    // ZMeas_.time_stamp = gps->header.stamp; //z
-    // ZMeas_.z(0) = gps->pose.pose.position.x;
-    // ZMeas_.z(1) = gps->pose.pose.position.y;
-    // ZMeas_.z(2) = gps->pose.pose.position.z;
-    // ZMeas_.z(3) = gps->twist.twist.linear.x;
-    // ZMeas_.z(4) = gps->twist.twist.linear.y;
-    // ZMeas_.z(5) = gps->twist.twist.linear.z;
-    // ZMeas_.time_stamp = imu->header.stamp;
-    // ZMeas_.z(6) = imu->linear_acceleration.x;
-    // ZMeas_.z(7) = imu->linear_acceleration.y;
-    // ZMeas_.z(8) = imu->linear_acceleration.z - g;
-    // assert( ZMeas_.time_stamp.toSec() >= ZLastMeas_.time_stamp.toSec() ); //z
-    
-    
-    /* KF3 */
-    // compare Current And Old AprilTag Time
+    /* KF w.r.t. High freqeuncy measurement (GPS&IMU) */
+    // Initialize the Kalman Filter when no AprilTag measurements detected in maxMeasurementOffTime_
     auto deltaT = ros::Time::now().toSec() - tagTimeStamp_;
     if (deltaT > maxMeasurementOffTime_)
     {
@@ -375,99 +289,52 @@ void LinearKF::GPSIMUCb(const nav_msgs::Odometry::ConstPtr& gps, const sensor_ms
     if (bKFIsInitialized_) {
 
         // step 1: measure
-        ZMeas2_.time_stamp = ros::Time::now(); //gps->header.stamp;
-        ZMeas2_.z(0) = gps->pose.pose.position.x;
-        ZMeas2_.z(1) = gps->pose.pose.position.y;
-        ZMeas2_.z(2) = gps->pose.pose.position.z;
-        ZMeas2_.z(3) = gps->twist.twist.linear.x;
-        ZMeas2_.z(4) = gps->twist.twist.linear.y;
-        ZMeas2_.z(5) = gps->twist.twist.linear.z;
-        ZMeas2_.z(6) = imu->linear_acceleration.x;
-        ZMeas2_.z(7) = imu->linear_acceleration.y;
-        ZMeas2_.z(8) = imu->linear_acceleration.z - g;
+        ZMeas_.time_stamp = ros::Time::now();
+        ZMeas_.z(0) = gps->pose.pose.position.x;
+        ZMeas_.z(1) = gps->pose.pose.position.y;
+        ZMeas_.z(2) = gps->pose.pose.position.z;
+        ZMeas_.z(3) = gps->twist.twist.linear.x;
+        ZMeas_.z(4) = gps->twist.twist.linear.y;
+        ZMeas_.z(5) = gps->twist.twist.linear.z;
+        ZMeas_.z(6) = imu->linear_acceleration.x;
+        ZMeas_.z(7) = imu->linear_acceleration.y;
+        ZMeas_.z(8) = imu->linear_acceleration.z - g;
+        assert( ZMeas_.time_stamp.toSec() >= ZLastMeas_.time_stamp.toSec() );
 
-        for (int i=0; i<statePredBuffer3_.size(); i++)
-        {
-            auto deltaT = ZMeas2_.time_stamp.toSec() - statePredBuffer3_[i].time_stamp.toSec();
-            if ((deltaT <= 0.02) && (deltaT >= 0))
-            {
-            statePred3_.time_stamp = statePredBuffer3_[i].time_stamp;
-            statePred3_.x = statePredBuffer3_[i].x;
-            statePred3_.P = statePredBuffer3_[i].P;
-            statePredBuffer3_.erase(statePredBuffer3_.begin(),statePredBuffer3_.begin()+i+1); // remove old states
-            break;
-            }
-        }
+        // prevent the new GPS&IMU measurement interrupting Apriltag update due to calculating delay
+        auto ZMeasStatic = ZMeas_;
 
         // step 2: update
         // compute measurement residual (innovation)
-        auto y = ZMeas2_.z - (H_ * statePred3_.x);
+        auto y = ZMeasStatic.z - (H_ * statePred1_.x);
 
         // Innovation covariance
-        auto S = (H_ * statePred3_.P * H_.transpose()) + R_;
+        auto S = (H_ * statePred1_.P * H_.transpose()) + R_;
 
         // optimal Kalman gain
-        auto K = statePred3_.P * H_.transpose() * S.inverse();
+        auto K = statePred1_.P * H_.transpose() * S.inverse();
 
         // Updated state estimate and it's covariacne
-        statePred3_.x = statePred3_.x + (K*y);
-        statePred3_.P = statePred3_.P - (K*H_*statePred3_.P);
+        statePred1_.x = statePred1_.x + (K*y);
+        statePred1_.P = statePred1_.P - (K*H_*statePred1_.P);
 
-        ZLastMeas2_.time_stamp = ZMeas2_.time_stamp;
-        ZLastMeas2_.z = ZMeas2_.z;
+        ZLastMeas_.time_stamp = ZMeasStatic.time_stamp;
+        ZLastMeas_.z = ZMeasStatic.z;
 
         // step 3: predict
-        if (!predict3()) {
+        if (!predict1()) {
             return;
         }
     }
-
 }
 
-
-void LinearKF::updateStatePredBuffer()
-{
-   KFState stateToStore;
-   stateToStore.time_stamp = statePred_.time_stamp;
-   stateToStore.x = statePred_.x;
-   stateToStore.P = statePred_.P;
-   statePredBuffer_.push_back(stateToStore);
-   if (statePredBuffer_.size() > statePredBufferSize_) {
-      statePredBuffer_.erase(statePredBuffer_.begin()); // remove first element in the buffer
-   }
-}
-
-void LinearKF::updateStatePredBuffer2()
-{
-   KFState stateToStore;
-   stateToStore.time_stamp = statePred2_.time_stamp;
-   stateToStore.x = statePred2_.x;
-   stateToStore.P = statePred2_.P;
-   statePredBuffer2_.push_back(stateToStore);
-   if (statePredBuffer2_.size() > statePredBufferSize_) {
-      statePredBuffer2_.erase(statePredBuffer2_.begin()); // remove first element in the buffer
-   }
-}
-
-void LinearKF::updateStatePredBuffer3()
-{
-   KFState stateToStore;
-   stateToStore.time_stamp = statePred3_.time_stamp;
-   stateToStore.x = statePred3_.x;
-   stateToStore.P = statePred3_.P;
-   statePredBuffer3_.push_back(stateToStore);
-   if (statePredBuffer3_.size() > statePredBufferSize_) {
-      statePredBuffer3_.erase(statePredBuffer3_.begin()); // remove first element in the buffer
-   }
-}
-
-bool LinearKF::predict()
+bool LinearKF::predict0()
 {
     // output: X_{k+1|k} & P_{k+1|k}
-    assert( statePred_.x.size() == 15 );
-    statePred_.x = F_ * statePred_.x;
+    assert( statePred0_.x.size() == 15 );
+    statePred0_.x = F0_ * statePred0_.x;
 
-    if (statePred_.x.norm() > 10000.0) {
+    if (statePred0_.x.norm() > 10000.0) {
         ROS_ERROR("state prediction exploded!!!");
         ROS_ERROR("Go to 0|0 Step");
         bKFIsInitialized_ = false;
@@ -475,25 +342,22 @@ bool LinearKF::predict()
         return false;
     }
 
-    statePred_.P = F_ * statePred_.P * F_.transpose() + Q_;
-    statePred_.time_stamp = ros::Time::now();  // means that k step of X_{k+1|k}
+    statePred0_.P = F0_ * statePred0_.P * F0_.transpose() + Q0_;
+    statePred0_.time_stamp = ros::Time::now();  // means that k step of X_{k+1|k}
 
     // Publish State Estimate 
-    publishState();
-
-    // Add(store) state to buffer
-    updateStatePredBuffer();
+    publishState0();
 
     return true;
 }
 
-bool LinearKF::predict2()
+bool LinearKF::predict1()
 {
     // output: X_{k+1|k} & P_{k+1|k}
-    assert( statePred2_.x.size() == 15 );
-    statePred2_.x = F2_ * statePred2_.x;
+    assert( statePred1_.x.size() == 15 );
+    statePred1_.x = F1_ * statePred1_.x;
 
-    if (statePred2_.x.norm() > 10000.0) {
+    if (statePred1_.x.norm() > 10000.0) {
         ROS_ERROR("state prediction exploded!!!");
         ROS_ERROR("Go to 0|0 Step");
         bKFIsInitialized_ = false;
@@ -501,91 +365,65 @@ bool LinearKF::predict2()
         return false;
     }
 
-    statePred2_.P = F2_ * statePred2_.P * F2_.transpose() + Q2_;
-    statePred2_.time_stamp = ros::Time::now();  // means that k step of X_{k+1|k}
+    statePred1_.P = F1_ * statePred1_.P * F1_.transpose() + Q1_;
+    statePred1_.time_stamp = ros::Time::now();  // means that k step of X_{k+1|k}
 
     // Publish State Estimate 
-    stateForControl_ = statePred2_;
-    publishState2();
-
-    // Add(store) state to buffer
-    updateStatePredBuffer2();
+    publishState1();
 
     return true;
 }
 
-bool LinearKF::predict3()
-{
-    // output: X_{k+1|k} & P_{k+1|k}
-    assert( statePred3_.x.size() == 15 );
-    statePred3_.x = F3_ * statePred3_.x;
-
-    if (statePred3_.x.norm() > 10000.0) {
-        ROS_ERROR("state prediction exploded!!!");
-        ROS_ERROR("Go to 0|0 Step");
-        bKFIsInitialized_ = false;
-        initKF();
-        return false;
-    }
-
-    statePred3_.P = F3_ * statePred3_.P * F3_.transpose() + Q3_;
-    statePred3_.time_stamp = ros::Time::now();  // means that k step of X_{k+1|k}
-
-    // Publish State Estimate 
-    publishState3();
-
-    // Add(store) state to buffer
-    updateStatePredBuffer3();
-
-    return true;
-}
-
-bool LinearKF::predictAsynchornously()
-{
-    // output: X_{k+1|k} & P_{k+1|k}
-    assert( stateForControl_.x.size() == 15 );
-    stateForControl_.x = F_ * stateForControl_.x;
-
-    if (stateForControl_.x.norm() > 10000.0) {
-        ROS_ERROR("state prediction exploded!!!");
-        ROS_ERROR("Go to 0|0 Step");
-        bKFIsInitialized_ = false;
-        initKF();
-        return false;
-    }
-
-    stateForControl_.P = F_ * stateForControl_.P * F_.transpose() + Q_;
-    stateForControl_.time_stamp = ros::Time::now();  // means that k step of X_{k+1|k}
-
-    // Publish State Estimate 
-    publishState2();
-    
-    return true;
-}
-
-void LinearKF::publishState()
+void LinearKF::publishState0()
 {
     nav_msgs::Odometry stateMsg_;
 
     stateMsg_.header.frame_id = bodyFrame_;
-    stateMsg_.header.stamp = statePred_.time_stamp;
+    stateMsg_.header.stamp = statePred0_.time_stamp;
 
-    stateMsg_.pose.pose.position.x = statePred_.x(9,0) - statePred_.x(0,0);  // relative pose (x)
-    stateMsg_.pose.pose.position.y = statePred_.x(10,0) - statePred_.x(1,0); // relative pose (y)
-    stateMsg_.pose.pose.position.z = statePred_.x(11,0) - statePred_.x(2,0); // relative pose (y)
-    // ROS_INFO("UAV Pose: [%.3f, %.3f, %.3f]", statePred_.x(0,0), statePred_.x(1,0), statePred_.x(2,0));
-    // ROS_INFO("UGV Pose: [%.3f, %.3f, %.3f]", statePred_.x(9,0), statePred_.x(10,0), statePred_.x(11,0));
-    // ROS_INFO("UGV Vel:  [%.3f, %.3f, %.3f]", statePred_.x(12,0), statePred_.x(13,0), statePred_.x(14,0));
+    stateMsg_.pose.pose.position.x = statePred0_.x(9,0) - statePred0_.x(0,0);  // relative pose (x)
+    stateMsg_.pose.pose.position.y = statePred0_.x(10,0) - statePred0_.x(1,0); // relative pose (y)
+    stateMsg_.pose.pose.position.z = statePred0_.x(11,0) - statePred0_.x(2,0); // relative pose (y)
 
-    stateMsg_.twist.twist.linear.x = statePred_.x(12,0);  // absolute vel (x of UGV)
-    stateMsg_.twist.twist.linear.y = statePred_.x(13,0);  // absolute vel (y of UGV)
-    stateMsg_.twist.twist.linear.z = statePred_.x(14,0);  // absolute vel (z of UGV)
+    stateMsg_.twist.twist.linear.x = statePred0_.x(12,0);  // absolute vel (x of UGV)
+    stateMsg_.twist.twist.linear.y = statePred0_.x(13,0);  // absolute vel (y of UGV)
+    stateMsg_.twist.twist.linear.z = statePred0_.x(14,0);  // absolute vel (z of UGV)
 
-    auto pxx = statePred_.P(0,0); auto pyy = statePred_.P(1,1); auto pzz = statePred_.P(2,2); // only UAV pose
-    auto paxx = stateForControl_.P(9,9); auto payy = stateForControl_.P(10,10); auto pazz = stateForControl_.P(11,11); // only UGV pose
-    auto vxx = statePred_.P(12,12); auto vyy = statePred_.P(13,13); auto vzz = statePred_.P(14,14);  // only UGV vel
-    // ROS_INFO("UAV Cov: [%.3f, %.3f, %.3f]", pxx, pyy, pzz);
-    // ROS_INFO("UGV Cov: [%.3f, %.3f, %.3f]", vxx, vyy, vzz);
+    auto pxx = statePred0_.P(0,0); auto pyy = statePred0_.P(1,1); auto pzz = statePred0_.P(2,2); // only UAV pose
+    auto paxx = statePred0_.P(9,9); auto payy = statePred0_.P(10,10); auto pazz = statePred0_.P(11,11); // only UGV pose
+    auto vxx = statePred0_.P(12,12); auto vyy = statePred0_.P(13,13); auto vzz = statePred0_.P(14,14);  // only UGV vel
+
+    stateMsg_.pose.covariance[0]   = pxx;
+    stateMsg_.pose.covariance[1]   = pyy; 
+    stateMsg_.pose.covariance[2]   = pzz;
+    stateMsg_.pose.covariance[3]   = paxx;
+    stateMsg_.pose.covariance[4]   = payy;
+    stateMsg_.pose.covariance[5]   = pazz;
+    stateMsg_.twist.covariance[0] = vxx;
+    stateMsg_.twist.covariance[1] = vyy;
+    stateMsg_.twist.covariance[2] = vzz; 
+
+    statePub0_.publish(stateMsg_);
+}
+
+void LinearKF::publishState1()
+{
+    nav_msgs::Odometry stateMsg_;
+
+    stateMsg_.header.frame_id = bodyFrame_;
+    stateMsg_.header.stamp = statePred1_.time_stamp;
+
+    stateMsg_.pose.pose.position.x = statePred1_.x(9,0) - statePred1_.x(0,0);  // relative pose (x)
+    stateMsg_.pose.pose.position.y = statePred1_.x(10,0) - statePred1_.x(1,0); // relative pose (y)
+    stateMsg_.pose.pose.position.z = statePred1_.x(11,0) - statePred1_.x(2,0); // relative pose (y)
+    stateMsg_.twist.twist.linear.x = statePred1_.x(12,0);  // absolute vel (x of UGV)
+    stateMsg_.twist.twist.linear.y = statePred1_.x(13,0);  // absolute vel (y of UGV)
+    stateMsg_.twist.twist.linear.z = statePred1_.x(14,0);  // absolute vel (z of UGV)
+
+    auto pxx = statePred1_.P(0,0); auto pyy = statePred1_.P(1,1); auto pzz = statePred1_.P(2,2); // only UAV pose
+    auto paxx = statePred1_.P(9,9); auto payy = statePred1_.P(10,10); auto pazz = statePred1_.P(11,11); // only UGV pose
+    auto vxx = statePred1_.P(12,12); auto vyy = statePred1_.P(13,13); auto vzz = statePred1_.P(14,14);  // only UGV vel
+
     stateMsg_.pose.covariance[0]   = pxx;
     stateMsg_.pose.covariance[1]   = pyy; 
     stateMsg_.pose.covariance[2]   = pzz;
@@ -593,102 +431,10 @@ void LinearKF::publishState()
     stateMsg_.pose.covariance[4]   = payy;
     stateMsg_.pose.covariance[5]   = pazz;
     stateMsg_.twist.covariance[0]  = vxx;
-    stateMsg_.twist.covariance[7]  = vyy;
-    stateMsg_.twist.covariance[14] = vyy; 
+    stateMsg_.twist.covariance[1]  = vyy;
+    stateMsg_.twist.covariance[2] = vyy; 
 
-    statePub_.publish(stateMsg_);
-}
-
-void LinearKF::publishState2()
-{
-    nav_msgs::Odometry stateMsg_;
-
-    stateMsg_.header.frame_id = bodyFrame_;
-    stateMsg_.header.stamp = stateForControl_.time_stamp;
-
-    stateMsg_.pose.pose.position.x = stateForControl_.x(9,0) - stateForControl_.x(0,0);  // relative pose (x)
-    stateMsg_.pose.pose.position.y = stateForControl_.x(10,0) - stateForControl_.x(1,0); // relative pose (y)
-    stateMsg_.pose.pose.position.z = stateForControl_.x(11,0) - stateForControl_.x(2,0); // relative pose (y)
-    // ROS_INFO("UAV Pose: [%.3f, %.3f, %.3f]", statePred_.x(0,0), statePred_.x(1,0), statePred_.x(2,0));
-    // ROS_INFO("UGV Pose: [%.3f, %.3f, %.3f]", statePred_.x(9,0), statePred_.x(10,0), statePred_.x(11,0));
-    // ROS_INFO("UGV Vel:  [%.3f, %.3f, %.3f]", statePred_.x(12,0), statePred_.x(13,0), statePred_.x(14,0));
-
-    stateMsg_.twist.twist.linear.x = stateForControl_.x(12,0);  // absolute vel (x of UGV)
-    stateMsg_.twist.twist.linear.y = stateForControl_.x(13,0);  // absolute vel (y of UGV)
-    stateMsg_.twist.twist.linear.z = stateForControl_.x(14,0);  // absolute vel (z of UGV)
-
-    auto pxx = stateForControl_.P(0,0); auto pyy = stateForControl_.P(1,1); auto pzz = stateForControl_.P(2,2); // only UAV pose
-    auto paxx = stateForControl_.P(9,9); auto payy = stateForControl_.P(10,10); auto pazz = stateForControl_.P(11,11); // only UGV pose
-    auto vxx = stateForControl_.P(12,12); auto vyy = stateForControl_.P(13,13); auto vzz = stateForControl_.P(14,14);  // only UGV vel
-    // ROS_INFO("UAV Cov: [%.3f, %.3f, %.3f]", pxx, pyy, pzz);
-    // ROS_INFO("UGV Cov: [%.3f, %.3f, %.3f]", vxx, vyy, vzz);
-    stateMsg_.pose.covariance[0]   = pxx;
-    stateMsg_.pose.covariance[1]   = pyy; 
-    stateMsg_.pose.covariance[2]   = pzz;
-    stateMsg_.pose.covariance[3]   = paxx;
-    stateMsg_.pose.covariance[4]   = payy;
-    stateMsg_.pose.covariance[5]   = pazz;
-    stateMsg_.twist.covariance[0]  = vxx;
-    stateMsg_.twist.covariance[7]  = vyy;
-    stateMsg_.twist.covariance[14] = vyy; 
-
-    statePub2_.publish(stateMsg_);
-}
-
-void LinearKF::publishState3()
-{
-    nav_msgs::Odometry stateMsg_;
-
-    stateMsg_.header.frame_id = bodyFrame_;
-    stateMsg_.header.stamp = statePred3_.time_stamp;
-
-    stateMsg_.pose.pose.position.x = statePred3_.x(9,0) - statePred3_.x(0,0);  // relative pose (x)
-    stateMsg_.pose.pose.position.y = statePred3_.x(10,0) - statePred3_.x(1,0); // relative pose (y)
-    stateMsg_.pose.pose.position.z = statePred3_.x(11,0) - statePred3_.x(2,0); // relative pose (y)
-    // ROS_INFO("UAV Pose: [%.3f, %.3f, %.3f]", statePred_.x(0,0), statePred_.x(1,0), statePred_.x(2,0));
-    // ROS_INFO("UGV Pose: [%.3f, %.3f, %.3f]", statePred_.x(9,0), statePred_.x(10,0), statePred_.x(11,0));
-    // ROS_INFO("UGV Vel:  [%.3f, %.3f, %.3f]", statePred_.x(12,0), statePred_.x(13,0), statePred_.x(14,0));
-
-    stateMsg_.twist.twist.linear.x = statePred3_.x(12,0);  // absolute vel (x of UGV)
-    stateMsg_.twist.twist.linear.y = statePred3_.x(13,0);  // absolute vel (y of UGV)
-    stateMsg_.twist.twist.linear.z = statePred3_.x(14,0);  // absolute vel (z of UGV)
-
-    auto pxx = statePred3_.P(0,0); auto pyy = statePred3_.P(1,1); auto pzz = statePred3_.P(2,2); // only UAV pose
-    auto paxx = statePred3_.P(9,9); auto payy = statePred3_.P(10,10); auto pazz = statePred3_.P(11,11); // only UGV pose
-    auto vxx = statePred3_.P(12,12); auto vyy = statePred3_.P(13,13); auto vzz = statePred3_.P(14,14);  // only UGV vel
-    // ROS_INFO("UAV Cov: [%.3f, %.3f, %.3f]", pxx, pyy, pzz);
-    // ROS_INFO("UGV Cov: [%.3f, %.3f, %.3f]", vxx, vyy, vzz);
-    stateMsg_.pose.covariance[0]   = pxx;
-    stateMsg_.pose.covariance[1]   = pyy; 
-    stateMsg_.pose.covariance[2]   = pzz;
-    stateMsg_.pose.covariance[3]   = paxx;
-    stateMsg_.pose.covariance[4]   = payy;
-    stateMsg_.pose.covariance[5]   = pazz;
-    stateMsg_.twist.covariance[0]  = vxx;
-    stateMsg_.twist.covariance[7]  = vyy;
-    stateMsg_.twist.covariance[14] = vyy; 
-
-    statePub3_.publish(stateMsg_);
-}
-
-void LinearKF::predictLoop(const ros::TimerEvent& event)
-{
-    // compare Current And Old AprilTag Time
-    auto deltaT = ros::Time::now().toSec() - tagTimeStamp_;
-    if (deltaT > maxMeasurementOffTime_)
-    {
-        ROS_WARN("AprilTag measurement is too old");
-        ROS_WARN("do KF initializing");
-        initKF();
-    }
-
-    if (bKFIsInitialized_) {
-        if (deltaT > dt_) {
-            // After update->predict, too fast predict means i use update->predict information little.
-            predict();
-            predictAsynchornously();
-        }
-    }
+    statePub1_.publish(stateMsg_);
 }
 
 

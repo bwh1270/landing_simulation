@@ -45,7 +45,7 @@ struct SensorMeasurement
 
 
 /** @class - Linear Kalman Filter Class
- * @brief -  Based on constant acceleration model and continuous noise model
+ * @brief -  Based on constant acceleration model and discrete or continuous noise model
  */
 class LinearKF
 {
@@ -55,26 +55,15 @@ class LinearKF
         std::string smallAprilTagFrame_;
         float UGVHeight_;
 
-        KFState statePred_; // State and Covariance Prediction
-        KFState statePred2_; 
-        KFState statePred3_;
-        KFState stateForControl_;  // only for prediction
-        std::vector<KFState> statePredBuffer_; // buffer to store last predicted x and P for finding closest prediction time
-        std::vector<KFState> statePredBuffer2_;
-        std::vector<KFState> statePredBuffer3_;
-        unsigned int statePredBufferSize_; // length of state buffer
-
+        KFState statePred0_; // State and Covariance Prediction
+        KFState statePred1_;
         SensorMeasurement ZMeas_;
         SensorMeasurement ZLastMeas_;
-        SensorMeasurement ZMeas2_;
-        SensorMeasurement ZLastMeas2_;
 
-        MatrixXd F_;
-        MatrixXd F2_;
-        MatrixXd F3_;
-        MatrixXd Q_;
-        MatrixXd Q2_;
-        MatrixXd Q3_;
+        MatrixXd F0_;
+        MatrixXd F1_;
+        MatrixXd Q0_;
+        MatrixXd Q1_;
         MatrixXd Qc_;
         MatrixXd H_;
         MatrixXd R_;
@@ -92,8 +81,8 @@ class LinearKF
         float dt_;            // KF prediction sampling time in seconds
         
         bool bAprilTagIsBig_;      // flag to check whether tag is big or not
-        bool bKFIsInitialized_; // flag to start state prediction. 1st measurement
-        bool bAprilTagIsMeasured_;
+        bool bKFIsInitialized_;    // flag to start state prediction. Iteration-0
+        bool bAprilTagIsMeasured_; // flag to check wheter tag is measrued
         
         double maxMeasurementOffTime_; // maximum time (in secs) with no measurement before filter is stopped        
         double tagTimeStamp_;
@@ -102,52 +91,34 @@ class LinearKF
         void setF(MatrixXd* F, double dt);
         void setQ(MatrixXd* Q, double dt);
         void setQc(MatrixXd* Qc, double dt);
-
         void setH();
         void setR();
 
 
         // Kalman Filter Initialization
-        void initKF(); // Initialize F_,Q_,H_,R_, initial state and covraiance estimates
-
-
-        // Add the current x_pred_ and P_red_ state to the end of buffer state_buffer_.
-        // It erases the first element in the state_buffer_ vector if its size exceeds state_buffer_size_.
-        void updateStatePredBuffer();
-        void updateStatePredBuffer2();
-        void updateStatePredBuffer3();
+        void initKF(); // Initialize F, Q, H, R, initial state and covraiance estimates
 
 
         // Perform Kalman Filter prediction step. Result is stored in statePred_.
         /** @return - true if prediction is successful (e.g. state does not explode) */
-        bool predict();
-        bool predict2();
-        bool predict3();
-        bool predictAsynchornously(); // only for predict
-
-        // Perform Kalman Filter update step.
-        // void update();
+        bool predict0();
+        bool predict1();
 
         // Publish the Relative Position w.r.t. Inertia and Absolute Velocity of AprilTag w.r.t. Inertia
         // This data will be used into Control UAV and Gimbal.
-        void publishState();
-        void publishState2();
-        void publishState3();
+        void publishState0();
+        void publishState1();
     
         // Input & Output
         ros::Subscriber aprilTagSub_; // to get measurement data from aprilTag
-        ros::Publisher statePub_;
-        ros::Publisher statePub2_;
-        ros::Publisher statePub3_;
         message_filters::Subscriber<nav_msgs::Odometry> GPSsub_;
         message_filters::Subscriber<sensor_msgs::Imu> IMUsub_;
         typedef message_filters::sync_policies::ApproximateTime<nav_msgs::Odometry, sensor_msgs::Imu> mySyncPolicy_;
         boost::shared_ptr<message_filters::Synchronizer<mySyncPolicy_>> sync_;
+        ros::Publisher statePub0_; // update rate w.r.t. Low frequency measurement (AprilTag)
+        ros::Publisher statePub1_; // update rate w.r.t. High frequency measurement (GPS&IMU)
 
-        ros::Timer predictTimer_;
-        void predictLoop(const ros::TimerEvent& event);
-
-        // Update measurements
+        // Update measurements with callback function
         void aprilTagCb(const nav_msgs::Odometry::ConstPtr& msg);
         void GPSIMUCb(const nav_msgs::Odometry::ConstPtr& gps, const sensor_msgs::Imu::ConstPtr& imu);
 
