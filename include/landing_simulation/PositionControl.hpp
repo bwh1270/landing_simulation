@@ -61,13 +61,13 @@ class PositionControl
         float desiredAlti_[2];
 
         // Control Gains
-        ControlGain PDFFGains_;
-        ControlGain PIDGains_;
+        ControlGain PDFFGains_;  // for horizontal components
+        ControlGain PIDGains_;   // for vertical component
         Vector2d ExyOld_;
         float EzOld_;
         float EzSum_;
         bool bIsNotFirstLoop_;
-
+        bool IsInitialized_;
 
         // Saturation Limit
         float limVelHorizontal_;
@@ -82,24 +82,14 @@ class PositionControl
         // Callback Functinos
         void UGVStateCb(const nav_msgs::Odometry::ConstPtr &msg);
         void UAVStateCb(const nav_msgs::Odometry::ConstPtr &msg);
-
-        // Math Functions
-        // void constrainXY(Vector2f* v0, Vector2f* v1, float* max);
-        // void constrainZ(float* vec, float upMax, float downMax);
-        // Vector3f convertQuaternionToEuler(Vector4f q);
-        // Vector4f convertEulerToQuaternion(Vector3f euler);
         
         // Initializing
         void setGimbal();
         void init();
 
         // Controller
-        void updateGimbal(const ros::TimerEvent& event);
         void updatePDFF();
-        // void updatePID();
-        
-        // Loops
-        void run();
+        // void updateGimbal(const ros::TimerEvent& event);
 };
 
 #endif

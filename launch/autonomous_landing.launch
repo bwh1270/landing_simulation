@@ -74,6 +74,7 @@
         <param name="pid_kp" value="1.0"/>
         <param name="pid_ki" value="0.0"/>
         <param name="pid_kd" value="0.0"/>
+        <!-- Do Not Change the limit -->
         <param name="max_horizontal_vel" value="10.0"/>
         <param name="max_upward_vel" value="3.0"/>
         <param name="max_downward_vel" value="1.0"/>
