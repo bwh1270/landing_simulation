@@ -125,40 +125,40 @@ void AprilTagDetection::aprilTagCb(const apriltag_ros::AprilTagDetectionArray::C
                     for (int i=0; i<3; i++) {
                         UAV_q_(i+1) = -UAV_q_(i+1); // conjugate
                     }
-                    rel_pM = UAV_q_M*rel_pM*UAV_q_;
-                    rel_qM = UAV_q_M*rel_qM*UAV_q_;
+                    rel_p_b = UAV_q_M*rel_pM*UAV_q_;
+                    rel_q_b = UAV_q_M*rel_qM*UAV_q_;
                     // ROS_INFO("[x,y,z]: [%.3f, %.3f, %.3f]", p(1), p(2), p(3));
                     // ROS_INFO("[w,x,y,z]: [%.3f, %.3f, %.3f, %.3f]", q(0), q(1), q(2), q(3));
 
                     if (!bIsFirstLoop_) {
                         relativeOdomMsg.header.frame_id = inertiaFrame_;
                         relativeOdomMsg.header.stamp    = ros::Time::now();
-                        relativeOdomMsg.pose.pose.position.x = rel_pM(1);
-                        relativeOdomMsg.pose.pose.position.y = rel_pM(2);
-                        relativeOdomMsg.pose.pose.position.z = rel_pM(3);
-                        relativeOdomMsg.pose.pose.orientation.w = rel_qM(0);
-                        relativeOdomMsg.pose.pose.orientation.x = rel_qM(1);
-                        relativeOdomMsg.pose.pose.orientation.y = rel_qM(2);
-                        relativeOdomMsg.pose.pose.orientation.z = rel_qM(3);
+                        relativeOdomMsg.pose.pose.position.x = rel_p_b(1);
+                        relativeOdomMsg.pose.pose.position.y = rel_p_b(2);
+                        relativeOdomMsg.pose.pose.position.z = rel_p_b(3);
+                        relativeOdomMsg.pose.pose.orientation.w = rel_q_b(0);
+                        relativeOdomMsg.pose.pose.orientation.x = rel_q_b(1);
+                        relativeOdomMsg.pose.pose.orientation.y = rel_q_b(2);
+                        relativeOdomMsg.pose.pose.orientation.z = rel_q_b(3);
 
                         double deltaT = ros::Time::now().toSec()-timeStamp_;
                         if (deltaT == 0.0) {
                             deltaT = priorDeltaT_;
                         }
-                        relativeOdomMsg.twist.twist.linear.x = (rel_pM(1) - priorUGVPos_(0)) / deltaT;
-                        relativeOdomMsg.twist.twist.linear.y = (rel_pM(2) - priorUGVPos_(1)) / deltaT;
-                        relativeOdomMsg.twist.twist.linear.z = (rel_pM(3) - priorUGVPos_(2)) / deltaT;
+                        relativeOdomMsg.twist.twist.linear.x = (rel_p_b(1) - priorUGVPos_(0)) / deltaT;
+                        relativeOdomMsg.twist.twist.linear.y = (rel_p_b(2) - priorUGVPos_(1)) / deltaT;
+                        relativeOdomMsg.twist.twist.linear.z = (rel_p_b(3) - priorUGVPos_(2)) / deltaT;
                         relativeOdomPub_.publish(relativeOdomMsg);
 
                         for (int i=0; i<3; i++) {
-                            priorUGVPos_(i) = rel_pM(i+1);
+                            priorUGVPos_(i) = rel_p_b(i+1);
                             priorDeltaT_ = deltaT;
                             timeStamp_ = ros::Time::now().toSec();
                         }
                     
                     } else {
                         for (int i=0; i<3; i++) {
-                            priorUGVPos_(i) = rel_pM(i+1);
+                            priorUGVPos_(i) = rel_p_b(i+1);
                             timeStamp_ = ros::Time::now().toSec();
                         }
                         bIsFirstLoop_ = false;
