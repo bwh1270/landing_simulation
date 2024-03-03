@@ -45,6 +45,7 @@ class PositionControl
 {
     private:
         // Input
+        string UGVStateTopic_;
         ros::Subscriber UGVStateSub_;
         ros::Subscriber UAVStateSub_;
 

@@ -4,8 +4,10 @@
 PositionControl::PositionControl(ros::NodeHandle *nh)
 {
     // Input
-    UGVStateSub_ = nh->subscribe("/odom", 5, &PositionControl::UGVStateCb, this);
-    // UGVStateSub_ = nh->subscribe("/magpie/estimator/state0", 5, &PositionControl::UGVStateCb, this);
+    nh->getParam("gt_or_esti", UGVStateTopic_);
+    string globalNS = "/";
+    assert( UGVStateTopic_[0] == globalNS[0] );
+    UGVStateSub_ = nh->subscribe(UGVStateTopic_, 5, &PositionControl::UGVStateCb, this);
     UAVStateSub_ = nh->subscribe("/mavros/global_position/local", 5, &PositionControl::UAVStateCb, this);
 
     // Output
