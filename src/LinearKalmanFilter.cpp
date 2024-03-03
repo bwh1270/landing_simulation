@@ -39,8 +39,8 @@ LinearKF::LinearKF(ros::NodeHandle *nh)
     sync_.reset(new message_filters::Synchronizer<mySyncPolicy_>(mySyncPolicy_(10), GPSsub_, IMUsub_));
     sync_->registerCallback(boost::bind(&LinearKF::GPSIMUCb, this, _1, _2));
 
-    statePub0_   = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state0", 5);  // 0 means Low frequency
-    statePub1_   = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state1", 5);  // 1 means High frequency
+    statePub0_ = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state0", 5);  // 0 means Low frequency
+    statePub1_ = nh->advertise<nav_msgs::Odometry>("/magpie/estimator/state1", 5);  // 1 means High frequency
 
     initKF();
 }

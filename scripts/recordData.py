@@ -20,6 +20,7 @@ class RecordData:
     def __init__(self):
         
         self.UAVPose_ = []
+        self.UAVVel_ = []
 
         self.UAVLists_ = []
         self.IMULists_ = []
@@ -52,8 +53,8 @@ class RecordData:
         
         time = msg.header.stamp.to_sec()
         self.UAVPose_ = [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]
-        vel = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
-        self.UAVLists_.append([time] + self.UAVPose_ + list(vel))
+        self.UAVVel_ = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
+        self.UAVLists_.append([time] + self.UAVPose_ + list(self.UAVVel_))
 
     def IMUCb(self, msg):
 
@@ -65,32 +66,40 @@ class RecordData:
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
-            self.aprilTagList_.append([time] + list(position))
+            velocity = (msg.twist.twist.linear.x + self.UAVVel_[0], msg.twist.twist.linear.y + self.UAVVel_[1], msg.twist.twist.linear.z + self.UAVVel_[2])
+            self.aprilTagList_.append([time] + list(position) + list(velocity))
         
     def KF0Cb(self, msg):
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
-            uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
-            self.KF0List_.append([time] + list(position))
-            self.KF0UncertaintyList_.append([time] + list(uncertainty))
+            velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
+            UAV_uncertainty = (msg.pose.covariance[0], msg.pose.covariance[1], msg.pose.covariance[2])
+            UGV_uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
+            UGV_vel_uncertainty = (msg.twist.covariance[0], msg.twist.covariance[1], msg.twist.covariance[2])
+            self.KF0List_.append([time] + list(position) + list(velocity))
+            self.KF0UncertaintyList_.append([time] + list(UAV_uncertainty) + list(UGV_uncertainty) + list(UGV_vel_uncertainty))
 
     def KF1Cb(self, msg):
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
-            uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
-            self.KF1List_.append([time] + list(position))
-            self.KF1UncertaintyList_.append([time] + list(uncertainty))
+            velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
+            UAV_uncertainty = (msg.pose.covariance[0], msg.pose.covariance[1], msg.pose.covariance[2])
+            UGV_uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
+            UGV_vel_uncertainty = (msg.twist.covariance[0], msg.twist.covariance[1], msg.twist.covariance[2])
+            self.KF1List_.append([time] + list(position) + list(velocity))
+            self.KF1UncertaintyList_.append([time] + list(UAV_uncertainty) + list(UGV_uncertainty) + list(UGV_vel_uncertainty))
             
     def GTCb(self, msg):
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
-            self.GTList_.append([time] + list(position))
+            velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
+            self.GTList_.append([time] + list(position) + list(velocity))
 
     def VelCb(self, msg):
 
@@ -107,8 +116,8 @@ class RecordData:
         
         GPScols = ['time','x','y','z','vx','vy','vz']
         IMUcols3 = ['ax','ay','az'] 
-        cols = ['time', 'x', 'y', 'z']
-        uncerCols = ['time' ,'pxx', 'pyy', 'pzz']
+        cols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz']
+        uncerCols = ['time' ,'pxx', 'pyy', 'pzz', 'paxx', 'payy', 'pazz', 'pa_vxx', 'pa_vyy', 'pa_vzz']
         vCols = ['time', 'vx', 'vy', 'vz']
          
         GPSIdx = range(len(self.UAVLists_))
