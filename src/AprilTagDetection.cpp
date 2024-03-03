@@ -59,6 +59,7 @@ void AprilTagDetection::poseCb(const nav_msgs::Odometry::ConstPtr& msg)
 	br.sendTransform(bodyWithRespectToInertiaMsg);
 
     // camera w.r.t. body broadcaster
+    /** @attention When you can measure the gimbal orientation (e.g., through gimbal imu plugin), you should edit the code below: */
     static tf2_ros::StaticTransformBroadcaster staticBr;
     geometry_msgs::TransformStamped camWithRespectToBodyMsg;
     camWithRespectToBodyMsg.header.frame_id         = bodyFrame_;
