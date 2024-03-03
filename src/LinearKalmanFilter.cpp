@@ -381,9 +381,9 @@ void LinearKF::publishState0()
     stateMsg_.header.frame_id = bodyFrame_;
     stateMsg_.header.stamp = statePred0_.time_stamp;
 
-    stateMsg_.pose.pose.position.x = statePred0_.x(9,0) - statePred0_.x(0,0);  // relative pose (x)
-    stateMsg_.pose.pose.position.y = statePred0_.x(10,0) - statePred0_.x(1,0); // relative pose (y)
-    stateMsg_.pose.pose.position.z = statePred0_.x(11,0) - statePred0_.x(2,0); // relative pose (y)
+    stateMsg_.pose.pose.position.x = statePred0_.x(9,0);   // absolute pose (x of UGV)
+    stateMsg_.pose.pose.position.y = statePred0_.x(10,0);  // absolute pose (y of UGV)
+    stateMsg_.pose.pose.position.z = statePred0_.x(11,0);  // absolute pose (y of UGV)
 
     stateMsg_.twist.twist.linear.x = statePred0_.x(12,0);  // absolute vel (x of UGV)
     stateMsg_.twist.twist.linear.y = statePred0_.x(13,0);  // absolute vel (y of UGV)
@@ -393,12 +393,12 @@ void LinearKF::publishState0()
     auto paxx = statePred0_.P(9,9); auto payy = statePred0_.P(10,10); auto pazz = statePred0_.P(11,11); // only UGV pose
     auto vxx = statePred0_.P(12,12); auto vyy = statePred0_.P(13,13); auto vzz = statePred0_.P(14,14);  // only UGV vel
 
-    stateMsg_.pose.covariance[0]   = pxx;
-    stateMsg_.pose.covariance[1]   = pyy; 
-    stateMsg_.pose.covariance[2]   = pzz;
-    stateMsg_.pose.covariance[3]   = paxx;
-    stateMsg_.pose.covariance[4]   = payy;
-    stateMsg_.pose.covariance[5]   = pazz;
+    stateMsg_.pose.covariance[0]  = pxx;
+    stateMsg_.pose.covariance[1]  = pyy; 
+    stateMsg_.pose.covariance[2]  = pzz;
+    stateMsg_.pose.covariance[3]  = paxx;
+    stateMsg_.pose.covariance[4]  = payy;
+    stateMsg_.pose.covariance[5]  = pazz;
     stateMsg_.twist.covariance[0] = vxx;
     stateMsg_.twist.covariance[1] = vyy;
     stateMsg_.twist.covariance[2] = vzz; 
@@ -413,9 +413,9 @@ void LinearKF::publishState1()
     stateMsg_.header.frame_id = bodyFrame_;
     stateMsg_.header.stamp = statePred1_.time_stamp;
 
-    stateMsg_.pose.pose.position.x = statePred1_.x(9,0) - statePred1_.x(0,0);  // relative pose (x)
-    stateMsg_.pose.pose.position.y = statePred1_.x(10,0) - statePred1_.x(1,0); // relative pose (y)
-    stateMsg_.pose.pose.position.z = statePred1_.x(11,0) - statePred1_.x(2,0); // relative pose (y)
+    stateMsg_.pose.pose.position.x = statePred1_.x(9,0);   // absolute pose (x of UGV)
+    stateMsg_.pose.pose.position.y = statePred1_.x(10,0);  // absolute pose (y of UGV)
+    stateMsg_.pose.pose.position.z = statePred1_.x(11,0);  // absolute pose (y of UGV)
     stateMsg_.twist.twist.linear.x = statePred1_.x(12,0);  // absolute vel (x of UGV)
     stateMsg_.twist.twist.linear.y = statePred1_.x(13,0);  // absolute vel (y of UGV)
     stateMsg_.twist.twist.linear.z = statePred1_.x(14,0);  // absolute vel (z of UGV)
@@ -424,14 +424,14 @@ void LinearKF::publishState1()
     auto paxx = statePred1_.P(9,9); auto payy = statePred1_.P(10,10); auto pazz = statePred1_.P(11,11); // only UGV pose
     auto vxx = statePred1_.P(12,12); auto vyy = statePred1_.P(13,13); auto vzz = statePred1_.P(14,14);  // only UGV vel
 
-    stateMsg_.pose.covariance[0]   = pxx;
-    stateMsg_.pose.covariance[1]   = pyy; 
-    stateMsg_.pose.covariance[2]   = pzz;
-    stateMsg_.pose.covariance[3]   = paxx;
-    stateMsg_.pose.covariance[4]   = payy;
-    stateMsg_.pose.covariance[5]   = pazz;
-    stateMsg_.twist.covariance[0]  = vxx;
-    stateMsg_.twist.covariance[1]  = vyy;
+    stateMsg_.pose.covariance[0]  = pxx;
+    stateMsg_.pose.covariance[1]  = pyy; 
+    stateMsg_.pose.covariance[2]  = pzz;
+    stateMsg_.pose.covariance[3]  = paxx;
+    stateMsg_.pose.covariance[4]  = payy;
+    stateMsg_.pose.covariance[5]  = pazz;
+    stateMsg_.twist.covariance[0] = vxx;
+    stateMsg_.twist.covariance[1] = vyy;
     stateMsg_.twist.covariance[2] = vyy; 
 
     statePub1_.publish(stateMsg_);

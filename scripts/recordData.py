@@ -73,7 +73,7 @@ class RecordData:
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
-            position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
+            position = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
             velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
             UAV_uncertainty = (msg.pose.covariance[0], msg.pose.covariance[1], msg.pose.covariance[2])
             UGV_uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
@@ -85,7 +85,7 @@ class RecordData:
         
         if (len(self.UAVPose_) == 3):
             time = msg.header.stamp.to_sec()
-            position = (msg.pose.pose.position.x + self.UAVPose_[0], msg.pose.pose.position.y + self.UAVPose_[1], msg.pose.pose.position.z + self.UAVPose_[2])
+            position = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
             velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
             UAV_uncertainty = (msg.pose.covariance[0], msg.pose.covariance[1], msg.pose.covariance[2])
             UGV_uncertainty = (msg.pose.covariance[3], msg.pose.covariance[4], msg.pose.covariance[5])
