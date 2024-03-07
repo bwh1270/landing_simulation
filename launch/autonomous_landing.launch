@@ -67,8 +67,8 @@
 
     <!-- PDFF Controller -->
     <node pkg="landing_simulation" name="pc_node" type="pc_node" output="screen">
-        <!-- <param name="gt_or_esti" value="/odom"/> -->
-        <param name="gt_or_esti" value="/magpie/estimator/state0"/>
+        <param name="gt_or_esti" value="/odom"/>
+        <!-- <param name="gt_or_esti" value="/magpie/estimator/state0"/> -->
         <param name="height_of_ugv" value="0.187"/>
         <param name="pdff_kp" value="0.5"/>
         <param name="pdff_kd" value="0.05"/>

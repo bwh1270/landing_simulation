@@ -36,7 +36,7 @@ class UGVVelocityControl
 };
 
 UGVVelocityControl::UGVVelocityControl(ros::NodeHandle *nh):
-desiredMaxVel_(5.5f),
+desiredMaxVel_(3.0f),
 velStep_(0.5f),
 dt_(1.0f)
 {
