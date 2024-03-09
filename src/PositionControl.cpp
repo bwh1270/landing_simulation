@@ -11,7 +11,7 @@ PositionControl::PositionControl(ros::NodeHandle *nh)
     UAVStateSub_ = nh->subscribe("/mavros/global_position/local", 5, &PositionControl::UAVStateCb, this);
 
     // Output
-    velSetpointPub_    = nh->advertise<geometry_msgs::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 5);
+    velSetpointPub_    = nh->advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 5);
     gimbalSetpointPub_ = nh->advertise<mavros_msgs::MountControl>("/mavros/mount_control/command", 3);
     
     // Define timer for constant loop rate
@@ -127,6 +127,7 @@ void PositionControl::UAVStateCb(const nav_msgs::Odometry::ConstPtr &msg)
 void PositionControl::updatePDFF()
 {   
     // i think UGVStateVec_ and UAVStateVec_ needs the buffer to find min time difference.
+    // And i think not same value of control gains is set for x and y
     if (UGVStateVec_.time_stamp.toSec() >= UAVStateVec_.time_stamp.toSec())
     {
         // clock_t cStart = clock();
@@ -158,10 +159,13 @@ void PositionControl::updatePDFF()
             EzSum_ = 0; // Re-initializing
         }
 
-        geometry_msgs::Twist velSetpointMsg;
-        velSetpointMsg.linear.x = VxySp(0);
-        velSetpointMsg.linear.y = VxySp(1);
-        velSetpointMsg.linear.z = VzSp;
+        mavros_msgs::PositionTarget velSetpointMsg;
+        velSetpointMsg.coordinate_frame = 1;           // FRAME_LOCAL_NED
+        velSetpointMsg.type_mask = 0b0000011111000111; // vx, vy, vz, vyaw
+        velSetpointMsg.velocity.x = VxySp(0);
+        velSetpointMsg.velocity.y = VxySp(1);
+        velSetpointMsg.velocity.z = VzSp;
+        velSetpointMsg.yaw_rate = 0.;
         velSetpointPub_.publish(velSetpointMsg);
 
         ExyOld_ = Exy;
