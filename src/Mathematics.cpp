@@ -17,7 +17,7 @@ Matrix4d calQuaternionMatrix(Vector4d q)
     qM(1,2) = -q(3);
     qM(2,1) = -qM(1,2);
     qM(1,3) = q(2);
-    qM(3,1) = -qM(3,1);
+    qM(3,1) = -qM(1,3);
     qM(2,3) = -q(1);
     qM(3,2) = q(1);
     
