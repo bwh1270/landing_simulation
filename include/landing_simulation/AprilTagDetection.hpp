@@ -32,24 +32,23 @@ class AprilTagDetection
 {
     private:
         int tagID_[2];
-        Vector4d UAV_q_;        // UAV orientation w.r.t. {i}
+        bool debug_;
+
+        // For rotations
+        Vector3d t_;
+        Matrix3d DCM_;
 
         // For calculating the Velocity Measurement
-        bool bIsFirstLoop_;
-        Vector3d priorUGVPos_; // UGV position w.r.t. {i} at prior step
+        Vector3d pi_ab_old_;
         double timeStamp_;
-        double priorDeltaT_; // prevent dt=0 => vel -> infinity
+        double deltaT_old_; // prevent dt=0 => vel -> infinity
+        bool bIsFirstLoop_;
 
         // Name of all frames
         std::string inertiaFrame_;
         std::string bodyFrame_;
         std::string cameraFrame_;
         std::string bigAprilTagFrame_;
-
-        // For Transformation 
-        tf2_ros::Buffer tfBuffer_;
-        tf2_ros::TransformListener tfListener_;
-        geometry_msgs::TransformStamped trans_;
         
         // Input & Output
         ros::Subscriber UAVPoseSub_;      // To convert {c} w.r.t. {i}, {b}-{i} relation is needed.

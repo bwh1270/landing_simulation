@@ -29,6 +29,7 @@
     <node pkg="landing_simulation" name="apriltag_node" type="apriltag_node" output="screen">
         <param name="big_tag_id" value="13"/> 
         <param name="small_tag_id" value="14"/>
+        <param name="debug" value="false"/>
         <param name="inertia_frame" value="map"/>
         <param name="body_frame" value="base_link"/>
         <param name="camera_frame" value="cgo3_camera_optical_frame"/>
