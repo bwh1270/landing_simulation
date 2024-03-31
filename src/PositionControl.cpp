@@ -5,8 +5,12 @@ PositionControl::PositionControl(ros::NodeHandle *nh)
 {
     // Input
     nh->getParam("gt_or_esti", UGVStateTopic_);
-    string globalNS = "/";
-    assert( UGVStateTopic_[0] == globalNS[0] );
+    if (UGVStateTopic_ == "gt") {
+        UGVStateTopic_ = "/odom";
+        
+    } else if (UGVStateTopic_ == "esti") {
+        UGVStateTopic_ = "/magpie/estimator/state0";
+    }
     UGVStateSub_ = nh->subscribe(UGVStateTopic_, 5, &PositionControl::UGVStateCb, this);
     UAVStateSub_ = nh->subscribe("/mavros/global_position/local", 5, &PositionControl::UAVStateCb, this);
 
@@ -39,7 +43,6 @@ PositionControl::PositionControl(ros::NodeHandle *nh)
     
     // Initializing
     init();
-    setGimbal();
 }
 
 PositionControl::~PositionControl()
@@ -128,6 +131,8 @@ void PositionControl::updatePDFF()
 {   
     // i think UGVStateVec_ and UAVStateVec_ needs the buffer to find min time difference.
     // And i think not same value of control gains is set for x and y
+    // auto dt = UGVStateVec_.time_stamp.toSec() - UAVStateVec_.time_stamp.toSec();
+    // cout << dt << endl;
     if (UGVStateVec_.time_stamp.toSec() >= UAVStateVec_.time_stamp.toSec())
     {
         // clock_t cStart = clock();
@@ -137,7 +142,7 @@ void PositionControl::updatePDFF()
         Vector2d VxySp;
 
         // vertical control - PID
-        double Ez = desiredAlti_[0] - UAVCurrentAlti_;
+        double Ez = desiredAlti_[1] - UAVCurrentAlti_;
         double VzSp;
 
         // ROS_WARN("Error of XY: [%.3f, %.3f]", Exy(0), Exy(1));

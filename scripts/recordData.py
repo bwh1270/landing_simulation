@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+import sys, argparse
 import os
 import time
 import threading
@@ -68,9 +69,11 @@ class RecordData:
             self.UAVAtti_ = []
             self.UAVLists_ = []
             self.thrSpList_ = []
+            self.IMULists_ = [] 
 
             rospy.Subscriber("/mavros/global_position/local", Odometry, self.UAVPoseCb)
             rospy.Subscriber("/mavros/setpoint_raw/target_attitude", AttitudeTarget, self.thrSpCb)
+            rospy.Subscriber("/mavros/imu/data", Imu, self.IMUCb)
 
         
         rospy.on_shutdown(self.saveDataOnShutdown)
@@ -88,8 +91,9 @@ class RecordData:
 
     def IMUCb(self, msg):
 
+        time = msg.header.stamp.to_sec()
         acc = (msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z)
-        self.IMULists_.append(list(acc))
+        self.IMULists_.append([time] + list(acc))
 
     def aprilTagCb(self, msg):
         
@@ -209,6 +213,7 @@ class RecordData:
 
             GPSCols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'w', 'x', 'y', 'z']
             thrCols = ['time', 'thr', 'w', 'x', 'y', 'z']
+            IMUcols = ['time', 'ax','ay','az'] 
         
             GPSIdx = range(len(self.UAVLists_))
             dfGPSData = pd.DataFrame(self.UAVLists_[:len(GPSIdx)], columns=GPSCols, index=GPSIdx)
@@ -216,8 +221,12 @@ class RecordData:
             ThrSpIdx = range(len(self.thrSpList_))
             dfThrSpData = pd.DataFrame(self.thrSpList_[:len(ThrSpIdx)], columns=thrCols, index=ThrSpIdx)
 
+            IMUIdx = range(len(self.IMULists_))
+            dfIMUData = pd.DataFrame(self.IMULists_[:len(IMUIdx)], columns=IMUcols, index=IMUIdx)
+
             dfGPSData.to_csv("GPSData.csv", index=False)
             dfThrSpData.to_csv("thrSpData.csv", index=False)
+            dfIMUData.to_csv("IMUData.csv", index=False)
 
 
         rospy.loginfo("Data saved to CSV files on shutdown.")
@@ -226,7 +235,9 @@ class RecordData:
 def main():
     rospy.init_node("record_node", anonymous=True)
     aims = ["kalman_tuning", "sliding_throttle", "velocity_tuning"]
-    recordDataObj = RecordData(aims[1])
+    idx = 1
+    recordDataObj = RecordData(aims[idx])
+    rospy.loginfo(f"{aims[idx]} is recording")
     rospy.spin()
 
 if __name__ == "__main__":

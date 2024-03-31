@@ -2,7 +2,7 @@
 #include "landing_simulation/Mathematics.hpp"
 
 
-AprilTagDetection::AprilTagDetection(ros::NodeHandle *nh) :
+AprilTagDetection::AprilTagDetection(ros::NodeHandle *nh)
 {
     // Get aprilTags ID
     nh->getParam("big_tag_id", tagID_[0]);

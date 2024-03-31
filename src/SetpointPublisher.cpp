@@ -5,6 +5,7 @@
 
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
+#include "mavros_msgs/PositionTarget.h"
 
 #include "mavros_msgs/SetMode.h"
 #include "mavros_msgs/State.h"
@@ -40,15 +41,16 @@ class SetpointPublisher
 
 SetpointPublisher::SetpointPublisher(ros::NodeHandle* nh)
 {
-    setpointPub_ = nh->advertise<geometry_msgs::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 5);
-    stateSub_  = nh->subscribe("/mavros/state", 10, &SetpointPublisher::stateCb, this);
+    // setpointPub_ = nh->advertise<geometry_msgs::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 5);
+    setpointPub_   = nh->advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
+    stateSub_      = nh->subscribe("/mavros/state", 10, &SetpointPublisher::stateCb, this);
     setModeClient_ = nh->serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
 
     IsOffboard_ = false;
 
-    // stepInput();
+    stepInput();
     // rampInput();
-    inputStepAndRamp();
+    // inputStepAndRamp();
 
 }
 
@@ -84,17 +86,21 @@ void SetpointPublisher::setOffboardMode()
 
 void SetpointPublisher::stepInput()
 {
-    double step[2] = {0.0, 5.5556};
-    float interval = 6.f;
-    float endTime = 30.f;
+    // double step[5] = {0.0, 1.0, 3.0, 5.55556, 7.0};
+    double step[2] = {0.0, 5.55556};
+    float interval = 20.f;
     int idx = 0;
+    int lastIdx = 2*(sizeof(step)/sizeof(step[0])-1);
 
-    geometry_msgs::Twist velSp;
-    velSp.linear.x = step[0];
-    // velSp.linear.y = step[0];
-    // velSp.linear.z = step[0];
+    ros::Time beginTime;
+    ros::Time priorTime;
+    mavros_msgs::PositionTarget velSp;
+    velSp.coordinate_frame = 1;
+    velSp.type_mask = 0b0000011111000111;
 
-    ros::Rate rate(100.0);
+    float f = 50.0;
+    float dt = 1./f;
+    ros::Rate rate(f);
 
     while (ros::ok()) {
         if (flightMode_ == "OFFBOARD") {
@@ -104,30 +110,52 @@ void SetpointPublisher::stepInput()
         ros::spinOnce();
     }
 
-    ROS_INFO("Step Input signal is published..!");
-    ros::Time beginTime = ros::Time::now();
-    ros::Time priorTime = ros::Time::now();
-    while (flightMode_ == "OFFBOARD") {
-        if (ros::Time::now().toSec() - beginTime.toSec() >= endTime) {
-            ROS_INFO("Step Input signal is terminated..!");
-            break;
-        }
+    while (ros::ok())
+    {
+        if (IsOffboard_) 
+        {
+            if (ros::Time::now().toSec() - priorTime.toSec() >= interval) {
+                idx++;
+                priorTime = ros::Time::now();
 
-        if (ros::Time::now().toSec() - priorTime.toSec() >= interval) {
-            idx++;
-            velSp.linear.x = step[idx%2];
-            // velSp.linear.y = step[0];
-            // velSp.linear.z = step[0];
-            priorTime = ros::Time::now();
-            ROS_INFO("step");
-        
-        }
+                if (idx > lastIdx) {
+                    ROS_INFO("Reference Input is terminated..!");
+                    break;
+                }
 
-        setpointPub_.publish(velSp);
-        ros::spinOnce();
-        rate.sleep();
+                ROS_INFO("reference input is changed");
+            }
+
+            if (idx%2 == 0) {
+                velSp.velocity.x = step[0];
+
+            } else if (idx < lastIdx) {
+                velSp.velocity.x = step[idx%2+idx/2];
+            }
+
+            setpointPub_.publish(velSp);
+            ros::spinOnce();
+            rate.sleep();
+
+        } else 
+        {
+            if (flightMode_ == "OFFBOARD") {
+                IsOffboard_ = true;
+                beginTime = ros::Time::now();
+                priorTime = ros::Time::now();
+                ROS_INFO("Offboard mode is detected..!");
+                ROS_INFO("Reference Signal is processed..!");
+                continue;
+            }
+
+            velSp.velocity.x = 0.0;
+            velSp.velocity.y = 0.0;
+            velSp.velocity.z = 0.0;
+            setpointPub_.publish(velSp);
+            ros::spinOnce();
+            rate.sleep();
+        }
     }
-    return;
 }
 
 void SetpointPublisher::inputStepAndRamp()
@@ -141,7 +169,9 @@ void SetpointPublisher::inputStepAndRamp()
     ros::Time beginTime;
     ros::Time priorTime;
     // double duration = interval*100;
-    geometry_msgs::Twist velSp;
+    mavros_msgs::PositionTarget velSp;
+    velSp.coordinate_frame = 1;
+    velSp.type_mask = 0b0000011111000111;
 
     float f = 50.0;
     float dt = 1./f;
@@ -164,15 +194,15 @@ void SetpointPublisher::inputStepAndRamp()
             }
 
             if (idx%2 == 0) {
-                velSp.linear.x = step[0];
+                velSp.velocity.x = step[0];
 
             } else if (idx < 7) {
-                velSp.linear.x = step[idx%2+idx/2];
+                velSp.velocity.x = step[idx%2+idx/2];
 
             } else {
-                velSp.linear.x += ramp[(idx-7)/2]*dt;
-                if (velSp.linear.x >= 12) {
-                    velSp.linear.x = 12.0;
+                velSp.velocity.x += ramp[(idx-7)/2]*dt;
+                if (velSp.velocity.x >= 12) {
+                    velSp.velocity.x = 12.0;
                 }
                 
                 if (idx == lastIdx) {
@@ -195,9 +225,9 @@ void SetpointPublisher::inputStepAndRamp()
                 continue;
             }
 
-            velSp.linear.x = 0.0;
-            velSp.linear.y = 0.0;
-            velSp.linear.z = 0.0;
+            velSp.velocity.x = 0.0;
+            velSp.velocity.y = 0.0;
+            velSp.velocity.z = 0.0;
             setpointPub_.publish(velSp);
             ros::spinOnce();
             rate.sleep();
