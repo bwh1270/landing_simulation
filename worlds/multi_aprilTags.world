@@ -146,7 +146,11 @@
       <static>1</static>
       <!-- <pose frame=''>2.0055 -1.05659 0 0 -0 0</pose> -->
     </model>
-
-
+    
+    <plugin name='wind_plugin' filename='libgazebo_wind_plugin.so'>
+      <frameId>world</frameId>
+      <robotNamespace/>
+      <windPubTopic>world_wind</windPubTopic>
+    </plugin>
   </world>
 </sdf>

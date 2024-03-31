@@ -245,5 +245,23 @@
         <projection_type>perspective</projection_type>
       </camera>
     </gui>
+
+    <plugin name='wind_plugin' filename='libgazebo_wind_plugin.so'>
+      <frameId>world</frameId>
+      <robotNamespace/>
+      <windVelocityMean>1.0</windVelocityMean>
+      <windVelocityMax>5.0</windVelocityMax>
+      <windVelocityVariance>0</windVelocityVariance>
+      <windDirectionMean>0 1 0</windDirectionMean>
+      <windDirectionVariance>0</windDirectionVariance>
+      <windGustStart>0</windGustStart>
+      <windGustDuration>0</windGustDuration>
+      <windGustVelocityMean>0</windGustVelocityMean>
+      <windGustVelocityMax>20.0</windGustVelocityMax>
+      <windGustVelocityVariance>0</windGustVelocityVariance>
+      <windGustDirectionMean>1 0 0</windGustDirectionMean>
+      <windGustDirectionVariance>0</windGustDirectionVariance>
+      <windPubTopic>world_wind</windPubTopic>
+    </plugin>
   </world>
 </sdf>
