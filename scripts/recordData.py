@@ -70,10 +70,12 @@ class RecordData:
             self.UAVLists_ = []
             self.thrSpList_ = []
             self.IMULists_ = [] 
+            self.GTList_ = []  # gt
 
             rospy.Subscriber("/mavros/global_position/local", Odometry, self.UAVPoseCb)
             rospy.Subscriber("/mavros/setpoint_raw/target_attitude", AttitudeTarget, self.thrSpCb)
             rospy.Subscriber("/mavros/imu/data", Imu, self.IMUCb)
+            rospy.Subscriber("/odom", Odometry, self.GTCb)
 
         
         rospy.on_shutdown(self.saveDataOnShutdown)
@@ -133,7 +135,8 @@ class RecordData:
             time = msg.header.stamp.to_sec()
             position = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z)
             velocity = (msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z)
-            self.GTList_.append([time] + list(position) + list(velocity))
+            angular = msg.twist.twist.angular.z
+            self.GTList_.append([time] + list(position) + list(velocity) + [angular])
 
     def VelCb(self, msg):
 
@@ -152,19 +155,20 @@ class RecordData:
 
         runWD = os.getcwd()
         cwd = runWD.split("/")[-1]
-        assert( cwd == "autonomous_landing_ws" )
+        assert( cwd == "als_ws" )
         target_path = f"../data/{self.aims}"
         os.chdir(target_path)
 
         if (self.aims == "kalman_tuning"):
             
             cols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz']
+            GTCcols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'dpsi']
             uncerCols = ['time' ,'pxx', 'pyy', 'pzz', 'paxx', 'payy', 'pazz', 'pa_vxx', 'pa_vyy', 'pa_vzz']
             GPSCols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'w', 'x', 'y', 'z']
             IMUcols = ['ax','ay','az'] 
 
             GTIdx = range(len(self.GTList_))
-            dfGTData = pd.DataFrame(self.GTList_[:len(GTIdx)], columns=cols, index=GTIdx)
+            dfGTData = pd.DataFrame(self.GTList_[:len(GTIdx)], columns=GTCols, index=GTIdx)
 
             aprilTagIdx = range(len(self.aprilTagList_))
             dfAprilTagData = pd.DataFrame(self.aprilTagList_[:len(aprilTagIdx)], columns=cols, index=aprilTagIdx)
@@ -214,7 +218,8 @@ class RecordData:
             GPSCols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'w', 'x', 'y', 'z']
             thrCols = ['time', 'thr', 'w', 'x', 'y', 'z']
             IMUcols = ['time', 'ax','ay','az'] 
-        
+            GTCols = ['time', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'dpsi']
+
             GPSIdx = range(len(self.UAVLists_))
             dfGPSData = pd.DataFrame(self.UAVLists_[:len(GPSIdx)], columns=GPSCols, index=GPSIdx)
         
@@ -224,9 +229,13 @@ class RecordData:
             IMUIdx = range(len(self.IMULists_))
             dfIMUData = pd.DataFrame(self.IMULists_[:len(IMUIdx)], columns=IMUcols, index=IMUIdx)
 
+            GTIdx = range(len(self.GTList_))
+            dfGTData = pd.DataFrame(self.GTList_[:len(GTIdx)], columns=GTCols, index=GTIdx)
+            
             dfGPSData.to_csv("GPSData.csv", index=False)
             dfThrSpData.to_csv("thrSpData.csv", index=False)
             dfIMUData.to_csv("IMUData.csv", index=False)
+            dfGTData.to_csv("GTData.csv", index=False)
 
 
         rospy.loginfo("Data saved to CSV files on shutdown.")
