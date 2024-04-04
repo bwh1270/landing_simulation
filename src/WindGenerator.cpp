@@ -5,7 +5,7 @@ WindGenerator::WindGenerator(const ros::NodeHandle &nh, const ros::NodeHandle &n
 nh_(nh),
 nh_private_(nh_private)
 {
-    // phaseSub_      = nh_.subscribe("/not_yet", 1, &WindGenerator::phaseCallback, this, ros::TransprotHints().tcpNoDelay());
+    phaseSub_      = nh_.subscribe("/mavros/phase_transition/transition_flag", 1, &WindGenerator::phaseCb, this, ros::TransportHints().tcpNoDelay());
     windPub_       = nh_.advertise<std_msgs::Float32MultiArray>("/wind", 10);
     windLoopTimer_ = nh_.createTimer(ros::Duration(LoopRate_), &WindGenerator::windLoopCb, this);
 
@@ -28,19 +28,29 @@ nh_private_(nh_private)
     windMsg_.data[field2int(FIELD::DIRECTIONVAR)] = windDirectionVar_;
 
     // For test
-    phase_ = PHASE::LANDING;
+    // phase_ = PHASE::LANDING;
 }
 
 WindGenerator::~WindGenerator()
 {
 }
 
-// void
-// WindGenerator::phaseCb(const )
-// {
-        // WHEN LANDING
-        // phase_ = static_cast<PHASE>(2);
-// }
+void
+WindGenerator::phaseCb(const std_msgs::UInt8::ConstPtr &msg)
+{
+    auto x = msg->data;
+
+    if (x == LANDING_MAGIC_) {
+        cout << "LANDING DETECTED" << endl;
+        cout << "wind-On" << endl;
+        phase_ = PHASE::LANDING;
+    
+    } else if (x == REVERSER_MAGIC_) {
+        cout << "HOLDING DETECTED" << endl;
+        cout << "wind-Off" << endl;
+        phase_ = PHASE::HOLDING;
+    }
+}
 
 void
 WindGenerator::windLoopCb(const ros::TimerEvent &event)
@@ -53,6 +63,8 @@ WindGenerator::windLoopCb(const ros::TimerEvent &event)
             break;
         
         case PHASE::HOLDING:
+            windMsg_.data[field2int(FIELD::SPEED)] = 0.f;
+            windPub_.publish(windMsg_);
             break;
         
         default:

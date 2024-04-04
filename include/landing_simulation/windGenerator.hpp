@@ -7,7 +7,7 @@
 #include "ros/ros.h"
 #include "std_msgs/Bool.h"
 #include "std_msgs/Float32MultiArray.h"
-#include "landing_simulation/wind.h"
+#include "std_msgs/UInt8.h"
 
 using namespace std;
 using namespace Eigen;
@@ -19,6 +19,9 @@ static constexpr float    DefaultWindSpeedMax_     = 5.f;
 static constexpr float    DefaultWindSpeedVar_     = 0.f;
 static const     Vector3f DefaultWindDirection_    = Vector3f(0.f,0.f,1.f);  // along with g
 static constexpr float    DefaultWindDirectionVar_ = 0.f;
+
+static constexpr uint8_t LANDING_MAGIC_  = 177;
+static constexpr uint8_t REVERSER_MAGIC_ = 119; 
 
 enum class PHASE {
     TRACKING,
@@ -41,13 +44,12 @@ class WindGenerator
     private:
         ros::NodeHandle nh_;
         ros::NodeHandle nh_private_;
-        // ros::Subscriber phaseSub_;
+        ros::Subscriber phaseSub_;
         ros::Publisher  windPub_;
         ros::Timer      windLoopTimer_;
 
         PHASE phase_{PHASE::TRACKING};
 
-        // landing_simulation::wind windMsg_;
         std_msgs::Float32MultiArray windMsg_;
         FIELD field_{FIELD::SPEED};
 
@@ -66,7 +68,7 @@ class WindGenerator
         WindGenerator(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private);
         virtual ~WindGenerator();
 
-        // void phaseCb(const );
+        void phaseCb(const std_msgs::UInt8::ConstPtr &msg);
         void windLoopCb(const ros::TimerEvent &event);
 };
 
