@@ -1,6 +1,8 @@
 <launch>
-<!-- Get param -->
-	<!-- <rosparam command="load" file="$(find landing_simulation)/config/param.yaml" /> -->
+
+<!-- Set param -->
+    <param name="/mavros/setpoint_attitude/reverse_thrust" value="true"/>
+
 
 <!-- Perception Node -->
 
