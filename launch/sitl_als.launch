@@ -48,4 +48,11 @@
     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" output="screen" args="-param robot_description -urdf -model aimsUGV -x $(arg x_ugv)"/>
 	<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
 
+<!--RQT PLOT-->
+    <!--node name="vel_res_plot"
+           pkg="rqt_plot"
+          type="rqt_plot"
+          args="/mavros/setpoint_raw/target_local/velocity/x /mavros/global_position/local/twist/twist/linear/x
+                -t" /-->
+				
 </launch>
